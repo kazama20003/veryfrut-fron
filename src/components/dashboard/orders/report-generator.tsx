@@ -18,22 +18,19 @@ import { api } from "@/lib/axiosInstance"
 import type { DateRange } from "react-day-picker"
 import { Input } from "@/components/ui/input"
 
-// Importación estática para evitar problemas en producción
-import * as XLSX_STYLE from "xlsx-js-style"
-
 // Mantener todas tus interfaces exactamente igual
 interface Area {
   id: number
   name: string
   companyId?: number
-  color: string // Now required hexadecimal color
+  color: string
 }
 
 interface Company {
   id: number
   name: string
   areas?: Area[]
-  color?: string // Color de la empresa
+  color?: string
 }
 
 interface User {
@@ -93,45 +90,6 @@ interface Order {
   createdAt?: string
 }
 
-// Mantener tu interfaz StyledCell exactamente igual
-interface StyledCell {
-  v?: string | number // valor
-  r?: Array<{
-    t: string
-    s: {
-      font: {
-        name: string
-        sz: number
-        bold: boolean
-        color: { rgb: string }
-      }
-    }
-  }> // rich text array
-  t: string // tipo
-  s: {
-    font?: {
-      bold?: boolean
-      color?: { rgb: string }
-      sz?: number
-      name?: string
-    }
-    fill?: {
-      fgColor: { rgb: string }
-    }
-    alignment?: {
-      horizontal: string
-      vertical?: string
-      wrapText?: boolean
-    }
-    border?: {
-      top?: { style: string; color?: { rgb: string } }
-      left?: { style: string; color?: { rgb: string } }
-      bottom?: { style: string; color?: { rgb: string } }
-      right?: { style: string; color?: { rgb: string } }
-    }
-  }
-}
-
 export function ReportGenerator() {
   // Mantener todos tus estados exactamente igual
   const [reportType, setReportType] = useState<"day" | "range">("day")
@@ -146,7 +104,7 @@ export function ReportGenerator() {
   const [hasData, setHasData] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
-  const [generatedPdfBlob, setGeneratedPdfBlob] = useState<Blob | null>(null)
+  const [, setGeneratedPdfBlob] = useState<Blob | null>(null)
 
   // Estados para datos reales
   const [companies, setCompanies] = useState<Company[]>([])
@@ -160,7 +118,6 @@ export function ReportGenerator() {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        // Cargar usuarios, compañías, productos y unidades de medida
         const [companiesResponse, productsResponse, unitMeasurementsResponse, categoriesResponse] = await Promise.all([
           api.get("/company"),
           api.get("/products"),
@@ -172,28 +129,23 @@ export function ReportGenerator() {
         const unitMeasurementsData = unitMeasurementsResponse.data
         const categoriesData = categoriesResponse.data || []
 
-        // Procesar categorías
         const categoriesMap: { [id: number]: ProductCategory } = {}
         categoriesData.forEach((category: ProductCategory) => {
           categoriesMap[category.id] = category
         })
         setCategories(categoriesMap)
 
-        // Procesar compañías - ya no necesitamos asignar colores aquí
         const processedCompanies = Array.isArray(companiesData) ? companiesData : [companiesData]
         setCompanies(processedCompanies)
 
-        // Extraer todas las áreas de las compañías - ahora usan el color hexadecimal del área
         const allAreas: Area[] = []
         processedCompanies.forEach((company: Company) => {
           if (company.areas && Array.isArray(company.areas)) {
-            // Las áreas ya vienen con su color hexadecimal
             allAreas.push(...company.areas)
           }
         })
         setAreas(allAreas)
 
-        // Asignar unidades de medida a los productos
         const productsWithUnits = productsData.map((product: Product) => {
           const unitMeasurement = unitMeasurementsData.find(
             (unit: UnitMeasurement) => unit.id === product.unitMeasurementId,
@@ -218,9 +170,7 @@ export function ReportGenerator() {
 
   // Mantener todas tus funciones helper exactamente igual
   const hexToRgb = (hex: string): string => {
-    // Remover el # si está presente
     const cleanHex = hex.replace("#", "")
-    // Si es un color de 3 caracteres, expandirlo a 6
     const fullHex =
       cleanHex.length === 3
         ? cleanHex
@@ -232,7 +182,6 @@ export function ReportGenerator() {
   }
 
   const getTextColor = (): string => {
-    // Siempre usar texto negro
     return "000000"
   }
 
@@ -247,7 +196,6 @@ export function ReportGenerator() {
           if (!observationsByArea[areaId]) {
             observationsByArea[areaId] = []
           }
-          // Evitar duplicados en la misma área
           if (!observationsByArea[areaId].includes(order.observation.trim())) {
             observationsByArea[areaId].push(order.observation.trim())
           }
@@ -280,10 +228,8 @@ export function ReportGenerator() {
     const quantities: string[] = []
     let dominantColor = "000000"
 
-    // Buscar cantidades en cada área de la empresa
     companyAreas.forEach((area, index) => {
       if (productQuantities[area.id] && productQuantities[area.id][productId]) {
-        // Buscar en las órdenes los items con este productId y areaId
         let foundInOrders = false
         for (const order of orders) {
           if (order.areaId === area.id) {
@@ -291,7 +237,6 @@ export function ReportGenerator() {
               if (item.productId === productId) {
                 const unit = item.unitMeasurement?.name || ""
                 quantities.push(`${item.quantity}${unit}`)
-                // Usar el color de la primera área como dominante
                 if (index === 0) {
                   dominantColor = hexToRgb(area.color)
                 }
@@ -301,12 +246,10 @@ export function ReportGenerator() {
           }
         }
 
-        // Si no encontramos nada en las órdenes, usar la cantidad del estado
         if (!foundInOrders && productQuantities[area.id][productId]) {
           const product = products.find((p) => p.id === productId)
           const unit = product?.unitMeasurement?.name || ""
           quantities.push(`${productQuantities[area.id][productId]}${unit}`)
-          // Usar el color de la primera área como dominante
           if (index === 0) {
             dominantColor = hexToRgb(area.color)
           }
@@ -318,7 +261,6 @@ export function ReportGenerator() {
       return { text: "", color: "000000", hasData: false }
     }
 
-    // Retornar texto simple concatenado con color dominante
     return {
       text: quantities.join(" + "),
       color: dominantColor,
@@ -329,49 +271,35 @@ export function ReportGenerator() {
   // Mantener tu función generatePDF exactamente igual
   const generatePDF = async () => {
     try {
-      // Importar solo jsPDF
       const { default: jsPDF } = await import("jspdf")
-
-      // Crear nuevo documento PDF
       const doc = new jsPDF("landscape", "mm", "a4")
-
-      // Configurar fuente
       doc.setFont("helvetica")
       let yPosition = 20
       const pageWidth = doc.internal.pageSize.getWidth()
       const pageHeight = doc.internal.pageSize.getHeight()
       const margin = 20
 
-      // Título del documento
       doc.setFontSize(16)
       doc.setFont("helvetica", "bold")
       doc.text("Reporte de Productos por Empresa", margin, yPosition)
       yPosition += 10
 
-      // Fecha del reporte
       doc.setFontSize(12)
       doc.setFont("helvetica", "normal")
       doc.text(`Fecha: ${reportDate}`, margin, yPosition)
       yPosition += 15
 
-      // Obtener productos agrupados por categoría
       const productsByCategory = getProductsForReport()
-
-      // Filtrar compañías que tienen áreas con pedidos
       const companiesWithOrders = companies.filter((company) => {
         const companyAreas = getAreasByCompany()[company.id] || []
         return companyAreas.some((area: Area) => areasWithOrders.includes(area.id))
       })
 
-      // MANTENER EL ORDEN ESPECÍFICO
       const categoryOrder = [1, 2, 5, 3, 4]
-
-      // Crear array ordenado de categorías que existen
       const orderedCategoryEntries: Array<[string, Product[]]> = categoryOrder
         .filter((categoryId) => productsByCategory[categoryId])
         .map((categoryId) => [categoryId.toString(), productsByCategory[categoryId] as Product[]])
 
-      // Agregar cualquier categoría adicional que no esté en el orden específico
       Object.entries(productsByCategory).forEach(([categoryIdStr, categoryProducts]) => {
         const categoryId = Number.parseInt(categoryIdStr)
         if (!categoryOrder.includes(categoryId)) {
@@ -379,17 +307,14 @@ export function ReportGenerator() {
         }
       })
 
-      // Calcular anchos de columna
       const totalCompanies = companiesWithOrders.length
       const firstColumnWidth = 60
       const companyColumnWidth = totalCompanies > 0 ? (pageWidth - margin * 2 - firstColumnWidth) / totalCompanies : 50
 
-      // Procesar cada categoría
       for (const [categoryIdStr, categoryProducts] of orderedCategoryEntries) {
         const categoryId = Number.parseInt(categoryIdStr)
         const categoryName = categories[categoryId]?.name || `Categoría ${categoryId}`
 
-        // Filtrar solo productos con pedidos
         const productsWithOrders = categoryProducts
           .filter((product: Product) => {
             for (const areaId in productQuantities) {
@@ -401,43 +326,35 @@ export function ReportGenerator() {
           })
           .sort((a: Product, b: Product) => a.name.localeCompare(b.name))
 
-        // Si no hay productos con pedidos en esta categoría, omitir
         if (productsWithOrders.length === 0) continue
 
-        // Verificar si necesitamos una nueva página
-        const estimatedHeight = (productsWithOrders.length + 3) * 8 // 3 filas extra para headers y total
+        const estimatedHeight = (productsWithOrders.length + 3) * 8
         if (yPosition + estimatedHeight > pageHeight - margin) {
           doc.addPage()
           yPosition = margin
         }
 
-        // Dibujar encabezado de categoría
         doc.setFontSize(10)
         doc.setFont("helvetica", "bold")
 
-        // Fila de fecha
         doc.setFillColor(255, 255, 255)
         doc.rect(margin, yPosition, pageWidth - margin * 2, 6, "F")
         doc.text(`fecha: ${reportDate}`, margin + 2, yPosition + 4)
         yPosition += 6
 
-        // Fila de encabezados
         let xPosition = margin
 
-        // Encabezado de categoría
         doc.setFillColor(242, 242, 242)
         doc.rect(xPosition, yPosition, firstColumnWidth, 8, "F")
         doc.rect(xPosition, yPosition, firstColumnWidth, 8, "S")
         doc.text(categoryName.toUpperCase(), xPosition + 2, yPosition + 5)
         xPosition += firstColumnWidth
 
-        // Encabezados de compañías
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
           if (companyAreas.length === 0) return
 
-          // Usar color de la empresa o de la primera área
           const companyColor = company.color || companyAreas[0]?.color || "#CCCCCC"
           const rgb = hexToRgb(companyColor)
           const r = Number.parseInt(rgb.substring(0, 2), 16)
@@ -449,7 +366,6 @@ export function ReportGenerator() {
           doc.rect(xPosition, yPosition, companyColumnWidth, 8, "S")
           doc.setTextColor(0, 0, 0)
 
-          // Centrar texto
           const textWidth = doc.getTextWidth(company.name.toUpperCase())
           const textX = xPosition + (companyColumnWidth - textWidth) / 2
           doc.text(company.name.toUpperCase(), textX, yPosition + 5)
@@ -457,13 +373,11 @@ export function ReportGenerator() {
         })
         yPosition += 8
 
-        // Filas de productos
         doc.setFont("helvetica", "normal")
         doc.setFontSize(8)
         productsWithOrders.forEach((product: Product) => {
           xPosition = margin
 
-          // Nombre del producto
           doc.setFillColor(255, 255, 255)
           doc.rect(xPosition, yPosition, firstColumnWidth, 6, "F")
           doc.rect(xPosition, yPosition, firstColumnWidth, 6, "S")
@@ -471,7 +385,6 @@ export function ReportGenerator() {
           doc.text(product.name, xPosition + 2, yPosition + 4)
           xPosition += firstColumnWidth
 
-          // Cantidades por empresa
           companiesWithOrders.forEach((company) => {
             const companyAreas =
               getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
@@ -481,11 +394,9 @@ export function ReportGenerator() {
             doc.rect(xPosition, yPosition, companyColumnWidth, 6, "F")
             doc.rect(xPosition, yPosition, companyColumnWidth, 6, "S")
 
-            // Obtener cantidades por empresa con colores (igual que el preview)
             const quantities: Array<{ quantity: string; color: string }> = []
             companyAreas.forEach((area) => {
               if (productQuantities[area.id] && productQuantities[area.id][product.id]) {
-                // Buscar en las órdenes los items con este productId y areaId
                 let foundInOrders = false
                 for (const order of orders) {
                   if (order.areaId === area.id) {
@@ -502,7 +413,6 @@ export function ReportGenerator() {
                   }
                 }
 
-                // Si no encontramos nada en las órdenes, usar la cantidad del estado
                 if (!foundInOrders && productQuantities[area.id][product.id]) {
                   const productData = products.find((p) => p.id === product.id)
                   const unit = productData?.unitMeasurement?.name || ""
@@ -514,47 +424,39 @@ export function ReportGenerator() {
               }
             })
 
-            // Renderizar cada cantidad con su color correspondiente
             if (quantities.length > 0) {
               let currentX = xPosition + 2
               const cellWidth = companyColumnWidth - 4
               const maxTextWidth = cellWidth
 
               quantities.forEach((item, index) => {
-                // Convertir color hex a RGB
                 const rgb = hexToRgb(item.color)
                 const r = Number.parseInt(rgb.substring(0, 2), 16)
                 const g = Number.parseInt(rgb.substring(2, 4), 16)
                 const b = Number.parseInt(rgb.substring(4, 6), 16)
 
-                // Establecer color del texto
                 doc.setTextColor(r, g, b)
 
-                // Calcular ancho del texto actual
                 const textWidth = doc.getTextWidth(item.quantity)
                 const separatorWidth = index < quantities.length - 1 ? doc.getTextWidth(" + ") : 0
 
-                // Verificar si el texto cabe en la celda
                 if (currentX + textWidth - (xPosition + 2) <= maxTextWidth) {
                   doc.text(item.quantity, currentX, yPosition + 4)
                   currentX += textWidth
 
-                  // Agregar separador si no es el último elemento
                   if (index < quantities.length - 1) {
-                    doc.setTextColor(0, 0, 0) // Color negro para el separador
+                    doc.setTextColor(0, 0, 0)
                     doc.text(" + ", currentX, yPosition + 4)
                     currentX += separatorWidth
                   }
                 } else {
-                  // Si no cabe, truncar y mostrar "..."
                   doc.setTextColor(0, 0, 0)
                   doc.text("...", currentX, yPosition + 4)
-                  return // break
+                  return
                 }
               })
             }
 
-            // Resetear color del texto a negro
             doc.setTextColor(0, 0, 0)
             xPosition += companyColumnWidth
           })
@@ -562,18 +464,15 @@ export function ReportGenerator() {
           yPosition += 6
         })
 
-        // Fila de totales
         xPosition = margin
         doc.setFont("helvetica", "bold")
 
-        // Total label
         doc.setFillColor(255, 255, 255)
         doc.rect(xPosition, yPosition, firstColumnWidth, 6, "F")
         doc.rect(xPosition, yPosition, firstColumnWidth, 6, "S")
         doc.text("TOTAL", xPosition + 2, yPosition + 4)
         xPosition += firstColumnWidth
 
-        // Totales por empresa
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
@@ -590,24 +489,20 @@ export function ReportGenerator() {
         yPosition += 10
       }
 
-      // SECCIÓN DE OBSERVACIONES CORREGIDA
       const observationsByArea = getObservationsByArea()
       const hasObservations = Object.keys(observationsByArea).length > 0
       console.log("¿Hay observaciones para PDF?", hasObservations, observationsByArea)
 
       if (hasObservations) {
-        // Verificar si necesitamos una nueva página
         if (yPosition > pageHeight - 50) {
           doc.addPage()
           yPosition = margin
         }
 
-        // Título de observaciones
         doc.setFont("helvetica", "bold")
         doc.setFontSize(10)
         let xPosition = margin
 
-        // Encabezado de observaciones
         doc.setFillColor(255, 255, 0)
         doc.rect(xPosition, yPosition, firstColumnWidth, 8, "F")
         doc.rect(xPosition, yPosition, firstColumnWidth, 8, "S")
@@ -615,7 +510,6 @@ export function ReportGenerator() {
         doc.text("OBSERVACION", xPosition + 2, yPosition + 5)
         xPosition += firstColumnWidth
 
-        // Encabezados de compañías para observaciones
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
@@ -637,7 +531,6 @@ export function ReportGenerator() {
         })
         yPosition += 8
 
-        // Fila de detalles de observaciones
         xPosition = margin
         doc.setFont("helvetica", "normal")
         doc.setFontSize(8)
@@ -656,7 +549,6 @@ export function ReportGenerator() {
           doc.rect(xPosition, yPosition, companyColumnWidth, 12, "F")
           doc.rect(xPosition, yPosition, companyColumnWidth, 12, "S")
 
-          // Combinar observaciones de todas las áreas de la empresa
           const allObservations: string[] = []
           companyAreas.forEach((area) => {
             const areaObservations = observationsByArea[area.id] || []
@@ -667,12 +559,10 @@ export function ReportGenerator() {
           const observationText = uniqueObservations.join("; ")
           console.log(`Observaciones para empresa ${company.name}:`, observationText)
 
-          // Dividir texto largo en múltiples líneas
           const maxWidth = companyColumnWidth - 4
           const lines = doc.splitTextToSize(observationText, maxWidth)
           let lineY = yPosition + 4
           lines.slice(0, 2).forEach((line: string) => {
-            // Máximo 2 líneas
             doc.text(line, xPosition + 2, lineY)
             lineY += 3
           })
@@ -681,11 +571,8 @@ export function ReportGenerator() {
         })
       }
 
-      // Generar blob del PDF
       const pdfBlob = doc.output("blob")
       setGeneratedPdfBlob(pdfBlob)
-
-      // Descargar PDF
       doc.save(`Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.pdf`)
 
       toast.success("Reporte PDF generado", {
@@ -712,12 +599,11 @@ export function ReportGenerator() {
     await generatePDF()
   }
 
-  // FUNCIÓN CORREGIDA: Generar Excel con mejor manejo de errores para producción
-  const downloadExcel = async () => {
+  // NUEVA FUNCIÓN: Excel con ExcelJS para máxima compatibilidad en producción
+  const downloadExcelWithExcelJS = async () => {
     try {
-      console.log("🔄 Iniciando generación de Excel...")
+      console.log("🔄 Iniciando generación de Excel con ExcelJS (producción)...")
 
-      // Verificar si hay datos para generar el Excel
       if (!hasData) {
         toast.error("No hay datos para generar el Excel", {
           description: "No se encontraron órdenes para el período seleccionado.",
@@ -725,51 +611,15 @@ export function ReportGenerator() {
         return
       }
 
-      // Verificar si XLSX_STYLE está disponible
-      if (!XLSX_STYLE || !XLSX_STYLE.utils) {
-        console.error("❌ xlsx-js-style no está disponible")
-        toast.error("Error de librería", {
-          description: "La librería Excel no está disponible. Intenta recargar la página.",
-        })
-        return
-      }
+      // Importar ExcelJS dinámicamente
+      const ExcelJS = await import("exceljs")
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet("Reporte de Productos")
 
-      console.log("✅ xlsx-js-style disponible, generando datos...")
+      let currentRow = 1
 
-      // Primero generar el PDF si no existe
-      let pdfBlob = generatedPdfBlob
-      if (!pdfBlob) {
-        console.log("📄 Generando PDF base...")
-        pdfBlob = await generatePDF()
-        if (!pdfBlob) {
-          toast.error("Error al generar PDF base", {
-            description: "No se pudo generar el PDF necesario para crear el Excel.",
-          })
-          return
-        }
-      }
-
-      // Crear un nuevo libro de Excel
-      const wb = XLSX_STYLE.utils.book_new()
-
-      // Crear datos para el Excel con estilos
-      const excelData: StyledCell[][] = []
-
-      // Estilo base para todas las celdas
-      const baseStyle = {
-        font: { name: "Calibri", sz: 11, bold: false },
-        border: {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        },
-      }
-
-      // Obtener productos agrupados por categoría (igual que el preview)
+      // Obtener datos necesarios
       const productsByCategory = getProductsForReport()
-
-      // Filtrar compañías que tienen áreas con pedidos (igual que el preview)
       const companiesWithOrders = companies.filter((company) => {
         const companyAreas = getAreasByCompany()[company.id] || []
         return companyAreas.some((area: Area) => areasWithOrders.includes(area.id))
@@ -779,15 +629,13 @@ export function ReportGenerator() {
         `📊 Procesando ${Object.keys(productsByCategory).length} categorías y ${companiesWithOrders.length} empresas`,
       )
 
-      // MANTENER EL ORDEN ESPECÍFICO (igual que el preview)
+      // Orden específico de categorías
       const categoryOrder = [1, 2, 5, 3, 4]
-
-      // Crear array ordenado de categorías que existen
       const orderedCategoryEntries: Array<[string, Product[]]> = categoryOrder
         .filter((categoryId) => productsByCategory[categoryId])
         .map((categoryId) => [categoryId.toString(), productsByCategory[categoryId] as Product[]])
 
-      // Agregar cualquier categoría adicional que no esté en el orden específico
+      // Agregar categorías adicionales
       Object.entries(productsByCategory).forEach(([categoryIdStr, categoryProducts]) => {
         const categoryId = Number.parseInt(categoryIdStr)
         if (!categoryOrder.includes(categoryId)) {
@@ -795,15 +643,13 @@ export function ReportGenerator() {
         }
       })
 
-      // Procesar cada categoría (replicando exactamente el preview)
-      orderedCategoryEntries.forEach(([categoryIdStr, categoryProducts]) => {
+      // Procesar cada categoría
+      for (const [categoryIdStr, categoryProducts] of orderedCategoryEntries) {
         const categoryId = Number.parseInt(categoryIdStr)
         const categoryName = categories[categoryId]?.name || `Categoría ${categoryId}`
 
-        // Filtrar solo productos con pedidos (igual que el preview)
         const productsWithOrders = categoryProducts
           .filter((product: Product) => {
-            // Verificar si hay algún pedido para este producto en cualquier área
             for (const areaId in productQuantities) {
               if (productQuantities[areaId][product.id]) {
                 return true
@@ -811,277 +657,444 @@ export function ReportGenerator() {
             }
             return false
           })
-          .sort((a: Product, b: Product) => a.name.localeCompare(b.name)) // Ordenar alfabéticamente
+          .sort((a: Product, b: Product) => a.name.localeCompare(b.name))
 
-        // Si no hay productos con pedidos en esta categoría, omitir
-        if (productsWithOrders.length === 0) return
+        if (productsWithOrders.length === 0) continue
 
-        // Agregar fila de fecha (igual que el preview)
-        const dateRow: StyledCell[] = [
-          {
-            v: `fecha: ${reportDate}`,
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "FFFFFF" } },
-            },
-          },
-        ]
+        // Fila de fecha
+        const dateRow = worksheet.getRow(currentRow)
+        dateRow.getCell(1).value = `fecha: ${reportDate}`
+        dateRow.getCell(1).font = { bold: true }
+        dateRow.getCell(1).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFFFF" },
+        }
+        currentRow++
 
-        // Rellenar el resto de columnas para la fecha
-        companiesWithOrders.forEach(() => {
-          dateRow.push({
-            v: "",
-            t: "s",
-            s: {
-              ...baseStyle,
-              fill: { fgColor: { rgb: "FFFFFF" } },
-            },
-          })
-        })
-        excelData.push(dateRow)
+        // Fila de encabezados
+        const headerRow = worksheet.getRow(currentRow)
+        headerRow.getCell(1).value = categoryName.toUpperCase()
+        headerRow.getCell(1).font = { bold: true }
+        headerRow.getCell(1).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFF2F2F2" },
+        }
 
-        // Preparar la fila de encabezados de compañías (igual que el preview)
-        const companyRow: StyledCell[] = [
-          {
-            v: categoryName.toUpperCase(),
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "F2F2F2" } },
-            },
-          },
-        ]
-
-        // Agregar compañías a la fila de encabezado (igual que el preview)
+        let colIndex = 2
         companiesWithOrders.forEach((company) => {
-          // Filtrar solo áreas con pedidos para verificar si la empresa tiene pedidos
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-          if (companyAreas.length === 0) {
-            return // Saltar esta compañía si no tiene áreas con pedidos
+          if (companyAreas.length === 0) return
+
+          const cell = headerRow.getCell(colIndex)
+          cell.value = company.name.toUpperCase()
+          cell.font = { bold: true, color: { argb: "FF000000" } }
+
+          // Aplicar color de empresa/área
+          const companyColor = company.color || companyAreas[0]?.color || "#CCCCCC"
+          const hexColor = companyColor.replace("#", "")
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: `FF${hexColor}` },
+          }
+          cell.alignment = { horizontal: "center" }
+
+          colIndex++
+        })
+        currentRow++
+
+        // Filas de productos
+        for (const product of productsWithOrders) {
+          const productRow = worksheet.getRow(currentRow)
+          productRow.getCell(1).value = product.name
+          productRow.getCell(1).fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFFFFFF" },
           }
 
-          // Usar el color de la empresa si está disponible, sino el color de la primera área
-          const companyColor = company.color ? hexToRgb(company.color) : hexToRgb(companyAreas[0]?.color || "#CCCCCC")
-
-          // Agregar la compañía
-          companyRow.push({
-            v: company.name.toUpperCase(),
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true, color: { rgb: "000000" } },
-              fill: { fgColor: { rgb: companyColor } },
-              alignment: { horizontal: "center" },
-            },
-          })
-        })
-        excelData.push(companyRow)
-
-        // Agregar productos de esta categoría (igual que el preview)
-        productsWithOrders.forEach((product: Product) => {
-          const productRow: StyledCell[] = [
-            {
-              v: product.name,
-              t: "s",
-              s: {
-                ...baseStyle,
-                fill: { fgColor: { rgb: "FFFFFF" } },
-                alignment: { horizontal: "left" },
-              },
-            },
-          ]
-
-          // Agregar cantidades por empresa (MÉTODO SIMPLE QUE SÍ FUNCIONA)
+          colIndex = 2
           companiesWithOrders.forEach((company) => {
             const companyAreas =
               getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-            if (companyAreas.length === 0) {
-              return // Saltar esta compañía si no tiene áreas con pedidos
-            }
+            if (companyAreas.length === 0) return
 
-            // Obtener la cantidad como texto simple con color
-            const quantityInfo = getProductQuantityForExcel(product.id, company.id)
-            if (quantityInfo.hasData && quantityInfo.text) {
-              productRow.push({
-                v: quantityInfo.text, // TEXTO SIMPLE QUE SÍ SE VE
-                t: "s",
-                s: {
-                  ...baseStyle,
-                  font: {
-                    ...baseStyle.font,
-                    bold: true,
-                    color: { rgb: quantityInfo.color }, // Color dominante del área
-                    sz: 12,
-                  },
-                  fill: { fgColor: { rgb: "FFFFFF" } },
-                  alignment: { horizontal: "left" },
-                  border: {
-                    top: { style: "thin", color: { rgb: "000000" } },
-                    left: { style: "thin", color: { rgb: "000000" } },
-                    bottom: { style: "thin", color: { rgb: "000000" } },
-                    right: { style: "thin", color: { rgb: "000000" } },
-                  },
-                },
-              })
+            const cell = productRow.getCell(colIndex)
+
+            // Obtener cantidades con colores
+            const quantities: Array<{ text: string; color: string }> = []
+            companyAreas.forEach((area) => {
+              if (productQuantities[area.id] && productQuantities[area.id][product.id]) {
+                let foundInOrders = false
+                for (const order of orders) {
+                  if (order.areaId === area.id) {
+                    for (const item of order.orderItems) {
+                      if (item.productId === product.id) {
+                        const unit = item.unitMeasurement?.name || ""
+                        quantities.push({
+                          text: `${item.quantity}${unit}`,
+                          color: area.color,
+                        })
+                        foundInOrders = true
+                      }
+                    }
+                  }
+                }
+
+                if (!foundInOrders && productQuantities[area.id][product.id]) {
+                  const productData = products.find((p) => p.id === product.id)
+                  const unit = productData?.unitMeasurement?.name || ""
+                  quantities.push({
+                    text: `${productQuantities[area.id][product.id]}${unit}`,
+                    color: area.color,
+                  })
+                }
+              }
+            })
+
+            if (quantities.length > 0) {
+              // Usar el color de la primera área como dominante
+              const dominantColor = quantities[0]?.color?.replace("#", "") || "000000"
+              cell.value = quantities.map((q) => q.text).join(" + ")
+              cell.font = {
+                bold: true,
+                color: { argb: `FF${dominantColor}` },
+                size: 12,
+              }
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFFFFFFF" },
+              }
             } else {
-              // Celda vacía si no hay cantidades
-              productRow.push({
-                v: "",
-                t: "s",
-                s: {
-                  ...baseStyle,
-                  fill: { fgColor: { rgb: "FFFFFF" } },
-                  alignment: { horizontal: "left" },
-                },
-              })
+              cell.value = ""
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFFFFFFF" },
+              }
             }
+
+            colIndex++
           })
+          currentRow++
+        }
 
-          excelData.push(productRow)
-        })
+        // Fila de totales
+        const totalRow = worksheet.getRow(currentRow)
+        totalRow.getCell(1).value = "TOTAL"
+        totalRow.getCell(1).font = { bold: true }
+        totalRow.getCell(1).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFFFF" },
+        }
 
-        // Agregar fila de totales para esta categoría (igual que el preview)
-        const totalRow: StyledCell[] = [
-          {
-            v: "TOTAL",
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "FFFFFF" } },
-              alignment: { horizontal: "left" },
-            },
-          },
-        ]
-
+        colIndex = 2
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-          if (companyAreas.length === 0) {
-            return // Saltar esta compañía si no tiene áreas con pedidos
-          }
+          if (companyAreas.length === 0) return
 
-          // Calcular total contando productos únicos para esta categoría en toda la empresa
           const total = calculateCompanyTotalByCategory(company.id, categoryId)
-          totalRow.push({
-            v: total ? `${total}` : "0",
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              alignment: { horizontal: "left" },
-              fill: { fgColor: { rgb: "FFFFFF" } },
-            },
-          })
+          const cell = totalRow.getCell(colIndex)
+          cell.value = total
+          cell.font = { bold: true }
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFFFFFF" },
+          }
+
+          colIndex++
         })
-        excelData.push(totalRow)
+        currentRow += 2 // Espacio entre categorías
+      }
 
-        // Agregar fila vacía para separación entre categorías
-        excelData.push([])
-      })
-
-      // SECCIÓN DE OBSERVACIONES CORREGIDA PARA EXCEL
+      // Agregar observaciones
       const observationsByArea = getObservationsByArea()
-      const hasObservations = Object.keys(observationsByArea).length > 0
-      console.log("¿Hay observaciones para Excel?", hasObservations, observationsByArea)
+      if (Object.keys(observationsByArea).length > 0) {
+        console.log("¿Hay observaciones para Excel?", true, observationsByArea)
 
-      if (hasObservations) {
-        // Fila de observaciones
-        const observationRow: StyledCell[] = [
-          {
-            v: "OBSERVACION",
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "FFFF00" } }, // Amarillo
-              alignment: { horizontal: "left" },
-            },
-          },
-        ]
+        const obsHeaderRow = worksheet.getRow(currentRow)
+        obsHeaderRow.getCell(1).value = "OBSERVACION"
+        obsHeaderRow.getCell(1).font = { bold: true }
+        obsHeaderRow.getCell(1).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFF00" },
+        }
 
-        // Agregar observaciones por empresa (igual que el preview)
+        let colIndex = 2
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-          if (companyAreas.length === 0) {
-            return
+          if (companyAreas.length === 0) return
+
+          const cell = obsHeaderRow.getCell(colIndex)
+          cell.value = company.name.toUpperCase()
+          cell.font = { bold: true }
+
+          const companyColor = company.color || companyAreas[0]?.color || "#CCCCCC"
+          const hexColor = companyColor.replace("#", "")
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: `FF${hexColor}` },
           }
 
-          // Combinar observaciones de todas las áreas de la empresa
+          colIndex++
+        })
+        currentRow++
+
+        const obsDetailRow = worksheet.getRow(currentRow)
+        obsDetailRow.getCell(1).value = "Detalle"
+        obsDetailRow.getCell(1).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFF99" },
+        }
+
+        colIndex = 2
+        companiesWithOrders.forEach((company) => {
+          const companyAreas =
+            getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+          if (companyAreas.length === 0) return
+
           const allObservations: string[] = []
           companyAreas.forEach((area) => {
             const areaObservations = observationsByArea[area.id] || []
             allObservations.push(...areaObservations)
           })
 
-          // Eliminar duplicados y unir
-          const uniqueObservations = [...new Set(allObservations)]
-          const observationText = uniqueObservations.join("; ")
-          console.log(`Observaciones Excel para empresa ${company.name}:`, observationText)
+          const cell = obsDetailRow.getCell(colIndex)
+          cell.value = [...new Set(allObservations)].join("; ")
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFFFF99" },
+          }
+          cell.alignment = { wrapText: true }
 
-          observationRow.push({
-            v: observationText,
-            t: "s",
-            s: {
-              ...baseStyle,
-              fill: { fgColor: { rgb: "FFFF99" } }, // Amarillo claro
-              alignment: { horizontal: "left", wrapText: true },
-            },
-          })
+          colIndex++
         })
-        excelData.push(observationRow)
+      } else {
+        console.log("¿Hay observaciones para Excel?", false, {})
       }
 
-      console.log(`📝 Datos preparados: ${excelData.length} filas`)
+      // Configurar anchos de columna
+      worksheet.getColumn(1).width = 40
+      for (let i = 2; i <= companiesWithOrders.length + 1; i++) {
+        worksheet.getColumn(i).width = 25
+      }
 
-      // Crear hoja de cálculo
-      const ws = XLSX_STYLE.utils.aoa_to_sheet(excelData)
+      // Generar y descargar
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
 
-      // Definir anchos de columna
-      const wscols = [
-        { wch: 40 }, // Nombre del producto/categoría
-      ]
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.xlsx`
+      link.click()
+      window.URL.revokeObjectURL(url)
 
-      // Agregar anchos para las columnas de empresas
-      companiesWithOrders.forEach(() => {
-        wscols.push({ wch: 25 }) // Ancho para empresa
-      })
-
-      ws["!cols"] = wscols
-
-      // Agregar hoja al libro con nombre único
-      XLSX_STYLE.utils.book_append_sheet(wb, ws, "Reporte de Productos")
-
-      // Generar archivo y descargar
-      const fileName = `Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.xlsx`
-      console.log(`💾 Descargando archivo: ${fileName}`)
-
-      XLSX_STYLE.writeFile(wb, fileName)
-
-      console.log("✅ Excel generado exitosamente")
+      console.log("✅ Excel con ExcelJS generado exitosamente")
       toast.success("Reporte Excel generado", {
-        description: "El archivo Excel se ha descargado correctamente basado en el PDF generado.",
+        description: "El archivo Excel se ha descargado correctamente con colores.",
       })
     } catch (error) {
-      console.error("❌ Error al generar Excel:", error)
-      console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace")
-
+      console.error("❌ Error al generar Excel con ExcelJS:", error)
       toast.error("Error al generar Excel", {
-        description: `Error: ${error instanceof Error ? error.message : "Error desconocido"}. Revisa la consola para más detalles.`,
+        description: `Error: ${error instanceof Error ? error.message : "Error desconocido"}`,
       })
+    }
+  }
+
+  // Función de fallback con XLSX simple (sin estilos pero funcional)
+  const downloadExcelSimple = async () => {
+    try {
+      console.log("🔄 Generando Excel simple (fallback)...")
+
+      if (!hasData) {
+        toast.error("No hay datos para generar el Excel", {
+          description: "No se encontraron órdenes para el período seleccionado.",
+        })
+        return
+      }
+
+      // Importar XLSX básico
+      const XLSX = await import("xlsx")
+
+      // Crear datos simples para Excel - CORREGIR EL TIPO ANY
+      const excelData: (string | number)[][] = []
+
+      const productsByCategory = getProductsForReport()
+      const companiesWithOrders = companies.filter((company) => {
+        const companyAreas = getAreasByCompany()[company.id] || []
+        return companyAreas.some((area: Area) => areasWithOrders.includes(area.id))
+      })
+
+      const categoryOrder = [1, 2, 5, 3, 4]
+      const orderedCategoryEntries: Array<[string, Product[]]> = categoryOrder
+        .filter((categoryId) => productsByCategory[categoryId])
+        .map((categoryId) => [categoryId.toString(), productsByCategory[categoryId] as Product[]])
+
+      Object.entries(productsByCategory).forEach(([categoryIdStr, categoryProducts]) => {
+        const categoryId = Number.parseInt(categoryIdStr)
+        if (!categoryOrder.includes(categoryId)) {
+          orderedCategoryEntries.push([categoryIdStr, categoryProducts as Product[]])
+        }
+      })
+
+      orderedCategoryEntries.forEach(([categoryIdStr, categoryProducts]) => {
+        const categoryId = Number.parseInt(categoryIdStr)
+        const categoryName = categories[categoryId]?.name || `Categoría ${categoryId}`
+
+        const productsWithOrders = categoryProducts
+          .filter((product: Product) => {
+            for (const areaId in productQuantities) {
+              if (productQuantities[areaId][product.id]) {
+                return true
+              }
+            }
+            return false
+          })
+          .sort((a: Product, b: Product) => a.name.localeCompare(b.name))
+
+        if (productsWithOrders.length === 0) return
+
+        // Fila de fecha
+        const dateRow: (string | number)[] = [`fecha: ${reportDate}`]
+        companiesWithOrders.forEach(() => dateRow.push(""))
+        excelData.push(dateRow)
+
+        // Fila de encabezados
+        const headerRow: (string | number)[] = [categoryName.toUpperCase()]
+        companiesWithOrders.forEach((company) => {
+          const companyAreas =
+            getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+          if (companyAreas.length > 0) {
+            headerRow.push(company.name.toUpperCase())
+          }
+        })
+        excelData.push(headerRow)
+
+        // Filas de productos
+        productsWithOrders.forEach((product: Product) => {
+          const productRow: (string | number)[] = [product.name]
+
+          companiesWithOrders.forEach((company) => {
+            const companyAreas =
+              getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+            if (companyAreas.length === 0) return
+
+            const quantityInfo = getProductQuantityForExcel(product.id, company.id)
+            productRow.push(quantityInfo.text || "")
+          })
+
+          excelData.push(productRow)
+        })
+
+        // Fila de totales
+        const totalRow: (string | number)[] = ["TOTAL"]
+        companiesWithOrders.forEach((company) => {
+          const companyAreas =
+            getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+          if (companyAreas.length === 0) return
+
+          const total = calculateCompanyTotalByCategory(company.id, categoryId)
+          totalRow.push(total.toString())
+        })
+        excelData.push(totalRow)
+
+        excelData.push([])
+      })
+
+      // Agregar observaciones
+      const observationsByArea = getObservationsByArea()
+      if (Object.keys(observationsByArea).length > 0) {
+        const observationHeaderRow: (string | number)[] = ["OBSERVACION"]
+        companiesWithOrders.forEach((company) => {
+          const companyAreas =
+            getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+          if (companyAreas.length > 0) {
+            observationHeaderRow.push(company.name.toUpperCase())
+          }
+        })
+        excelData.push(observationHeaderRow)
+
+        const observationDetailRow: (string | number)[] = ["Detalle"]
+        companiesWithOrders.forEach((company) => {
+          const companyAreas =
+            getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+          if (companyAreas.length === 0) return
+
+          const allObservations: string[] = []
+          companyAreas.forEach((area) => {
+            const areaObservations = observationsByArea[area.id] || []
+            allObservations.push(...areaObservations)
+          })
+
+          const uniqueObservations = [...new Set(allObservations)]
+          observationDetailRow.push(uniqueObservations.join("; "))
+        })
+        excelData.push(observationDetailRow)
+      }
+
+      // Crear workbook y worksheet
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(excelData)
+
+      // Configurar anchos de columna
+      const wscols = [{ wch: 40 }]
+      companiesWithOrders.forEach(() => {
+        wscols.push({ wch: 25 })
+      })
+      ws["!cols"] = wscols
+
+      XLSX.utils.book_append_sheet(wb, ws, "Reporte de Productos")
+
+      const fileName = `Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.xlsx`
+      XLSX.writeFile(wb, fileName)
+
+      console.log("✅ Excel simple generado exitosamente")
+      toast.success("Reporte Excel generado", {
+        description: "El archivo Excel se ha descargado correctamente (versión simple).",
+      })
+    } catch (error) {
+      console.error("❌ Error al generar Excel simple:", error)
+      toast.error("Error al generar Excel", {
+        description: `Error: ${error instanceof Error ? error.message : "Error desconocido"}`,
+      })
+    }
+  }
+
+  // Función principal de descarga de Excel con fallbacks
+  const downloadExcel = async () => {
+    try {
+      // Intentar primero con ExcelJS (más confiable en producción)
+      await downloadExcelWithExcelJS()
+    } catch (error) {
+      console.error("ExcelJS falló, intentando con XLSX simple:", error)
+      try {
+        // Fallback a XLSX simple
+        await downloadExcelSimple()
+      } catch (fallbackError) {
+        console.error("Todos los métodos de Excel fallaron:", fallbackError)
+        toast.error("Error al generar Excel", {
+          description: "No se pudo generar el archivo Excel. Intenta recargar la página.",
+        })
+      }
     }
   }
 
   // Mantener todas tus otras funciones exactamente igual
   const getProductsForReport = () => {
-    // Si tenemos productos reales, usarlos agrupados por categoría
     if (products.length > 0) {
-      // Agrupar productos por categoría
       const productsByCategory: { [categoryId: number]: Product[] } = {}
       products.forEach((product) => {
         const categoryId = product.categoryId || 0
@@ -1091,23 +1104,19 @@ export function ReportGenerator() {
         productsByCategory[categoryId].push(product)
       })
 
-      // Ordenar productos alfabéticamente dentro de cada categoría
       Object.keys(productsByCategory).forEach((categoryId) => {
         productsByCategory[Number(categoryId)].sort((a: Product, b: Product) => a.name.localeCompare(b.name))
       })
 
-      // ORDEN ESPECÍFICO REQUERIDO: 1=Verduras, 2=Frutas, 5=Hierbas, 3=IGV, 4=Otros
       const categoryOrder = [1, 2, 5, 3, 4]
       const orderedCategories: { [categoryId: number]: Product[] } = {}
 
-      // Aplicar el orden específico - FORZAR este orden exacto
       categoryOrder.forEach((categoryId) => {
         if (productsByCategory[categoryId] && productsByCategory[categoryId].length > 0) {
           orderedCategories[categoryId] = productsByCategory[categoryId]
         }
       })
 
-      // Agregar cualquier categoría que no esté en el orden específico al final
       Object.keys(productsByCategory).forEach((categoryIdStr) => {
         const categoryId = Number(categoryIdStr)
         if (!categoryOrder.includes(categoryId) && productsByCategory[categoryId].length > 0) {
@@ -1118,10 +1127,7 @@ export function ReportGenerator() {
       return orderedCategories
     }
 
-    // Datos de demostración mínimos con el orden correcto y propiedades completas
     const demoData: { [categoryId: number]: Product[] } = {}
-    // IMPORTANTE: Crear el objeto en el orden específico requerido
-    // 1=Verduras, 2=Frutas, 5=Hierbas, 3=IGV, 4=Otros
     demoData[1] = [
       {
         id: 1,
@@ -1184,10 +1190,8 @@ export function ReportGenerator() {
 
     const quantities: Array<{ quantity: string; color: string; areaName: string }> = []
 
-    // Buscar cantidades en cada área de la empresa
     companyAreas.forEach((area) => {
       if (productQuantities[area.id] && productQuantities[area.id][productId]) {
-        // Buscar en las órdenes los items con este productId y areaId
         for (const order of orders) {
           if (order.areaId === area.id) {
             for (const item of order.orderItems) {
@@ -1203,7 +1207,6 @@ export function ReportGenerator() {
           }
         }
 
-        // Si no encontramos nada en las órdenes, usar la cantidad del estado
         if (quantities.filter((q) => q.areaName === area.name).length === 0 && productQuantities[area.id][productId]) {
           const product = products.find((p) => p.id === productId)
           const unit = product?.unitMeasurement?.name || ""
@@ -1216,7 +1219,6 @@ export function ReportGenerator() {
       }
     })
 
-    // Crear HTML con colores para cada cantidad
     return quantities
       .map((item) => {
         return `<span style="color: ${item.color}; font-weight: bold;">${item.quantity}</span>`
@@ -1231,7 +1233,6 @@ export function ReportGenerator() {
     let productCount = 0
     const categoryProducts = products.filter((p) => p.categoryId === categoryId)
 
-    // Contar productos únicos que tienen pedidos en cualquier área de la empresa
     categoryProducts.forEach((product) => {
       let hasOrderInCompany = false
       companyAreas.forEach((area) => {
@@ -1260,7 +1261,6 @@ export function ReportGenerator() {
       return null
     }
 
-    // Filtrar compañías que tienen áreas con pedidos
     const companiesWithOrders = companies.filter((company) => {
       const companyAreas = getAreasByCompany()[company.id] || []
       return companyAreas.some((area) => areasWithOrders.includes(area.id))
@@ -1282,7 +1282,6 @@ export function ReportGenerator() {
                       return null
                     }
 
-                    // Usar el color de la empresa si está disponible, sino el color de la primera área
                     const companyColor = company.color || companyAreas[0]?.color || "#CCCCCC"
                     const textColor = getTextColor()
 
@@ -1311,14 +1310,12 @@ export function ReportGenerator() {
                       return null
                     }
 
-                    // Combinar observaciones de todas las áreas de la empresa
                     const allObservations: string[] = []
                     companyAreas.forEach((area) => {
                       const areaObservations = observationsByArea[area.id] || []
                       allObservations.push(...areaObservations)
                     })
 
-                    // Eliminar duplicados y unir
                     const uniqueObservations = [...new Set(allObservations)]
                     const observationText = uniqueObservations.join("; ")
                     console.log(`Observaciones preview para empresa ${company.name}:`, observationText)
@@ -1343,41 +1340,34 @@ export function ReportGenerator() {
     setIsLoading(true)
     setHasData(false)
     setShowReport(false)
-    setGeneratedPdfBlob(null) // Limpiar PDF anterior
+    setGeneratedPdfBlob(null)
 
     try {
-      // Establecer la fecha del reporte según el tipo
       let orders: Order[] = []
       let apiUrl = ""
 
       if (reportType === "day" && selectedDate) {
-        // Para reportes de un solo día, necesitamos el inicio y fin del día
         const startOfDay = new Date(selectedDate)
         startOfDay.setHours(0, 0, 0, 0)
         const endOfDay = new Date(selectedDate)
         endOfDay.setHours(23, 59, 59, 999)
 
-        // Formatear fechas en ISO8601
         const startDateISO = startOfDay.toISOString()
         const endDateISO = endOfDay.toISOString()
         setReportDate(format(selectedDate, "dd/MM/yyyy"))
 
-        // Usar la ruta correcta para filtrar por fecha
         console.log(`Cargando órdenes para la fecha: ${format(selectedDate, "yyyy-MM-dd")}`)
         apiUrl = `/orders/filter?startDate=${encodeURIComponent(startDateISO)}&endDate=${encodeURIComponent(endDateISO)}`
       } else if (reportType === "range" && dateRange.from && dateRange.to) {
-        // Para reportes de rango, usamos desde el inicio del primer día hasta el final del último día
         const startOfRange = new Date(dateRange.from)
         startOfRange.setHours(0, 0, 0, 0)
         const endOfRange = new Date(dateRange.to)
         endOfRange.setHours(23, 59, 59, 999)
 
-        // Formatear fechas en ISO8601
         const startDateISO = startOfRange.toISOString()
         const endDateISO = endOfRange.toISOString()
         setReportDate(`${format(dateRange.from, "dd/MM/yyyy")} - ${format(dateRange.to, "dd/MM/yyyy")}`)
 
-        // Usar la ruta correcta para filtrar por rango de fechas
         console.log(
           `Cargando órdenes para el rango: ${format(dateRange.from, "yyyy-MM-dd")} a ${format(dateRange.to, "yyyy-MM-dd")}`,
         )
@@ -1398,7 +1388,6 @@ export function ReportGenerator() {
         return
       }
 
-      // Verificar si hay órdenes
       if (!orders || orders.length === 0) {
         toast.warning("No hay órdenes", {
           description: "No se encontraron órdenes para el período seleccionado.",
@@ -1407,11 +1396,9 @@ export function ReportGenerator() {
         return
       }
 
-      // Cargar datos completos para cada orden
       const ordersWithDetails = await Promise.all(
         orders.map(async (order: Order) => {
           try {
-            // Obtener datos del usuario si no están incluidos
             let user = order.user
             if (!user && order.userId) {
               try {
@@ -1422,17 +1409,14 @@ export function ReportGenerator() {
               }
             }
 
-            // Obtener datos de productos para cada item
             const orderItemsWithProducts = await Promise.all(
               order.orderItems.map(async (item: OrderItem) => {
                 try {
-                  // Si el producto no está incluido, cargarlo
                   let product = item.product
                   if (!product && item.productId) {
                     const productResponse = await api.get(`/products/${item.productId}`)
                     product = productResponse.data
 
-                    // Obtener unidad de medida si no está incluida
                     if (product && product.unitMeasurementId && !product.unitMeasurement) {
                       try {
                         const unitResponse = await api.get(`/unit-measurements/${product.unitMeasurementId}`)
@@ -1451,7 +1435,6 @@ export function ReportGenerator() {
               }),
             )
 
-            // Obtener área si no está incluida
             let area = order.area
             if (!area && order.areaId) {
               const foundArea = areas.find((a) => a.id === order.areaId)
@@ -1459,7 +1442,6 @@ export function ReportGenerator() {
                 area = foundArea
               }
             } else if (!area && user?.areas && user.areas.length > 0) {
-              // Si no hay areaId pero el usuario tiene áreas, usar la primera
               area = user.areas[0]
             }
 
@@ -1478,16 +1460,13 @@ export function ReportGenerator() {
 
       setOrders(ordersWithDetails)
 
-      // Procesar datos para el reporte - cantidades de productos por área
       const quantities: { [areaId: number]: { [productId: number]: number } } = {}
       const areasWithOrdersIds: number[] = []
 
-      // Inicializar estructura para todas las áreas
       areas.forEach((area) => {
         quantities[area.id] = {}
       })
 
-      // Agrupar productos por área basado en las órdenes
       ordersWithDetails.forEach((order) => {
         const areaId =
           order.areaId ||
@@ -1499,15 +1478,12 @@ export function ReportGenerator() {
             quantities[areaId] = {}
           }
 
-          // Registrar esta área como una con pedidos
           if (!areasWithOrdersIds.includes(areaId)) {
             areasWithOrdersIds.push(areaId)
           }
 
           order.orderItems.forEach((item) => {
             if (item.productId) {
-              // Create a unique key that includes both product ID and unit measurement ID
-              // Create a unique key that includes both product ID and unit measurement ID
               const productKey = item.productId
               if (!quantities[areaId][productKey]) {
                 quantities[areaId][productKey] = 0
@@ -1521,7 +1497,6 @@ export function ReportGenerator() {
       setProductQuantities(quantities)
       setAreasWithOrders(areasWithOrdersIds)
 
-      // Verificar si hay datos para mostrar
       let hasAnyData = false
       for (const areaId in quantities) {
         if (Object.keys(quantities[areaId]).length > 0) {
@@ -1538,10 +1513,7 @@ export function ReportGenerator() {
         return
       }
 
-      // Indicar que hay datos disponibles
       setHasData(true)
-
-      // Mostrar el reporte
       setShowReport(true)
     } catch (error) {
       console.error("Error al generar vista previa:", error)
@@ -1556,16 +1528,12 @@ export function ReportGenerator() {
   // Mantener tu función renderCategoryTables exactamente igual
   const renderCategoryTables = () => {
     const productsByCategory = getProductsForReport()
-
-    // ORDEN ESPECÍFICO: 1=Verduras, 2=Frutas, 5=Hierbas, 3=IGV, 4=Otros
     const categoryOrder = [1, 2, 5, 3, 4]
 
-    // Crear array ordenado de categorías que existen
     const orderedCategoryEntries: Array<[string, Product[]]> = categoryOrder
       .filter((categoryId) => productsByCategory[categoryId])
       .map((categoryId) => [categoryId.toString(), productsByCategory[categoryId] as Product[]])
 
-    // Agregar cualquier categoría adicional que no esté en el orden específico
     Object.entries(productsByCategory).forEach(([categoryIdStr, categoryProducts]) => {
       const categoryId = Number.parseInt(categoryIdStr)
       if (!categoryOrder.includes(categoryId)) {
@@ -1577,10 +1545,8 @@ export function ReportGenerator() {
       const categoryId = Number.parseInt(categoryIdStr)
       const categoryName = categories[categoryId]?.name || `Categoría ${categoryId}`
 
-      // Filtrar solo productos con pedidos
       const productsWithOrders = (categoryProducts as Product[])
         .filter((product: Product) => {
-          // Verificar si hay algún pedido para este producto en cualquier área
           for (const areaId in productQuantities) {
             if (productQuantities[areaId][product.id]) {
               return true
@@ -1588,12 +1554,10 @@ export function ReportGenerator() {
           }
           return false
         })
-        .sort((a: Product, b: Product) => a.name.localeCompare(b.name)) // Ordenar alfabéticamente
+        .sort((a: Product, b: Product) => a.name.localeCompare(b.name))
 
-      // Si no hay productos con pedidos en esta categoría, no mostrar la tabla
       if (productsWithOrders.length === 0) return null
 
-      // Filtrar compañías que tienen áreas con pedidos
       const companiesWithOrders = companies.filter((company) => {
         const companyAreas = getAreasByCompany()[company.id] || []
         return companyAreas.some((area) => areasWithOrders.includes(area.id))
@@ -1613,7 +1577,6 @@ export function ReportGenerator() {
                       fecha: {reportDate}
                     </th>
                   </tr>
-                  {/* Fila de compañías */}
                   <tr className="bg-white">
                     <th className="px-4 py-2 text-left border bg-gray-100 sticky left-0 z-20">
                       {categoryName.toUpperCase()}
@@ -1625,7 +1588,6 @@ export function ReportGenerator() {
                         return null
                       }
 
-                      // Usar el color de la empresa si está disponible, sino el color de la primera área
                       const companyColor = company.color || companyAreas[0]?.color || "#CCCCCC"
                       const textColor = getTextColor()
 
@@ -1758,7 +1720,6 @@ export function ReportGenerator() {
                 value={reportType}
                 onValueChange={(value) => {
                   setReportType(value as "day" | "range")
-                  // Resetear el reporte al cambiar el tipo
                   setShowReport(false)
                   setHasData(false)
                   setGeneratedPdfBlob(null)
@@ -1843,7 +1804,6 @@ export function ReportGenerator() {
               )}
             </Button>
           </div>
-          {/* Vista previa del reporte */}
           {showReport && (
             <div className="mt-4 space-y-4 flex-1 overflow-hidden flex flex-col">
               <div className="flex items-center justify-between">
