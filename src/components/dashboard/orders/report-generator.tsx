@@ -18,7 +18,10 @@ import { api } from "@/lib/axiosInstance"
 import type { DateRange } from "react-day-picker"
 import { Input } from "@/components/ui/input"
 
-// Update the interfaces to match the backend structure
+// Importación estática para evitar problemas en producción
+import * as XLSX_STYLE from "xlsx-js-style"
+
+// Mantener todas tus interfaces exactamente igual
 interface Area {
   id: number
   name: string
@@ -90,7 +93,7 @@ interface Order {
   createdAt?: string
 }
 
-// Interfaz para el tipo de celda de Excel con estilos y rich text
+// Mantener tu interfaz StyledCell exactamente igual
 interface StyledCell {
   v?: string | number // valor
   r?: Array<{
@@ -129,8 +132,8 @@ interface StyledCell {
   }
 }
 
-// Replace the existing ReportGenerator component with this updated version
 export function ReportGenerator() {
+  // Mantener todos tus estados exactamente igual
   const [reportType, setReportType] = useState<"day" | "range">("day")
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -153,7 +156,7 @@ export function ReportGenerator() {
   const [categories, setCategories] = useState<{ [id: number]: ProductCategory }>({})
   const [areasWithOrders, setAreasWithOrders] = useState<number[]>([])
 
-  // Cargar datos iniciales
+  // Mantener tu función loadInitialData exactamente igual
   useEffect(() => {
     const loadInitialData = async () => {
       try {
@@ -164,7 +167,6 @@ export function ReportGenerator() {
           api.get("/unit-measurements"),
           api.get("/categories"),
         ])
-
         const companiesData = companiesResponse.data
         const productsData = productsResponse.data
         const unitMeasurementsData = unitMeasurementsResponse.data
@@ -214,7 +216,7 @@ export function ReportGenerator() {
     loadInitialData()
   }, [])
 
-  // Función para convertir color hexadecimal a RGB para Excel
+  // Mantener todas tus funciones helper exactamente igual
   const hexToRgb = (hex: string): string => {
     // Remover el # si está presente
     const cleanHex = hex.replace("#", "")
@@ -229,23 +231,18 @@ export function ReportGenerator() {
     return fullHex.toUpperCase()
   }
 
-  // Función para determinar si el texto debe ser blanco o negro basado en el color de fondo
   const getTextColor = (): string => {
     // Siempre usar texto negro
     return "000000"
   }
 
-  // Función CORREGIDA para obtener observaciones por área
   const getObservationsByArea = () => {
     const observationsByArea: { [areaId: number]: string[] } = {}
-
     console.log("Procesando observaciones de órdenes:", orders.length)
-
     orders.forEach((order) => {
       if (order.observation && order.observation.trim()) {
         const areaId = order.areaId || order.area?.id
         console.log(`Orden ${order.id}: observación="${order.observation}", areaId=${areaId}`)
-
         if (areaId) {
           if (!observationsByArea[areaId]) {
             observationsByArea[areaId] = []
@@ -257,12 +254,10 @@ export function ReportGenerator() {
         }
       }
     })
-
     console.log("Observaciones por área:", observationsByArea)
     return observationsByArea
   }
 
-  // Agrupar áreas por compañía
   const getAreasByCompany = () => {
     const areasByCompany: { [companyId: number]: Area[] } = {}
     companies.forEach((company) => {
@@ -276,7 +271,6 @@ export function ReportGenerator() {
     return areasByCompany
   }
 
-  // FUNCIÓN CORREGIDA: Obtener cantidad de producto por empresa para Excel con COLORES POR ÁREA
   const getProductQuantityForExcel = (productId: number, companyId: number) => {
     const companyAreas = getAreasByCompany()[companyId]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
     if (companyAreas.length === 0) {
@@ -306,6 +300,7 @@ export function ReportGenerator() {
             }
           }
         }
+
         // Si no encontramos nada en las órdenes, usar la cantidad del estado
         if (!foundInOrders && productQuantities[area.id][productId]) {
           const product = products.find((p) => p.id === productId)
@@ -331,7 +326,7 @@ export function ReportGenerator() {
     }
   }
 
-  // Función para generar PDF igual que el preview - VERSIÓN SIMPLE SIN AUTOTABLE
+  // Mantener tu función generatePDF exactamente igual
   const generatePDF = async () => {
     try {
       // Importar solo jsPDF
@@ -460,13 +455,11 @@ export function ReportGenerator() {
           doc.text(company.name.toUpperCase(), textX, yPosition + 5)
           xPosition += companyColumnWidth
         })
-
         yPosition += 8
 
         // Filas de productos
         doc.setFont("helvetica", "normal")
         doc.setFontSize(8)
-
         productsWithOrders.forEach((product: Product) => {
           xPosition = margin
 
@@ -490,7 +483,6 @@ export function ReportGenerator() {
 
             // Obtener cantidades por empresa con colores (igual que el preview)
             const quantities: Array<{ quantity: string; color: string }> = []
-
             companyAreas.forEach((area) => {
               if (productQuantities[area.id] && productQuantities[area.id][product.id]) {
                 // Buscar en las órdenes los items con este productId y areaId
@@ -590,7 +582,6 @@ export function ReportGenerator() {
           doc.setFillColor(255, 255, 255)
           doc.rect(xPosition, yPosition, companyColumnWidth, 6, "F")
           doc.rect(xPosition, yPosition, companyColumnWidth, 6, "S")
-
           const total = calculateCompanyTotalByCategory(company.id, categoryId)
           doc.text(total.toString(), xPosition + 2, yPosition + 4)
           xPosition += companyColumnWidth
@@ -602,7 +593,6 @@ export function ReportGenerator() {
       // SECCIÓN DE OBSERVACIONES CORREGIDA
       const observationsByArea = getObservationsByArea()
       const hasObservations = Object.keys(observationsByArea).length > 0
-
       console.log("¿Hay observaciones para PDF?", hasObservations, observationsByArea)
 
       if (hasObservations) {
@@ -640,20 +630,17 @@ export function ReportGenerator() {
           doc.setFillColor(r, g, b)
           doc.rect(xPosition, yPosition, companyColumnWidth, 8, "F")
           doc.rect(xPosition, yPosition, companyColumnWidth, 8, "S")
-
           const textWidth = doc.getTextWidth(company.name.toUpperCase())
           const textX = xPosition + (companyColumnWidth - textWidth) / 2
           doc.text(company.name.toUpperCase(), textX, yPosition + 5)
           xPosition += companyColumnWidth
         })
-
         yPosition += 8
 
         // Fila de detalles de observaciones
         xPosition = margin
         doc.setFont("helvetica", "normal")
         doc.setFontSize(8)
-
         doc.setFillColor(255, 255, 200)
         doc.rect(xPosition, yPosition, firstColumnWidth, 12, "F")
         doc.rect(xPosition, yPosition, firstColumnWidth, 12, "S")
@@ -678,14 +665,12 @@ export function ReportGenerator() {
 
           const uniqueObservations = [...new Set(allObservations)]
           const observationText = uniqueObservations.join("; ")
-
           console.log(`Observaciones para empresa ${company.name}:`, observationText)
 
           // Dividir texto largo en múltiples líneas
           const maxWidth = companyColumnWidth - 4
           const lines = doc.splitTextToSize(observationText, maxWidth)
           let lineY = yPosition + 4
-
           lines.slice(0, 2).forEach((line: string) => {
             // Máximo 2 líneas
             doc.text(line, xPosition + 2, lineY)
@@ -717,7 +702,6 @@ export function ReportGenerator() {
     }
   }
 
-  // Función para descargar PDF
   const downloadPDF = async () => {
     if (!hasData) {
       toast.error("No hay datos para generar el PDF", {
@@ -725,13 +709,14 @@ export function ReportGenerator() {
       })
       return
     }
-
     await generatePDF()
   }
 
-  // Generar y descargar Excel - VERSIÓN CORREGIDA que primero genera PDF
+  // FUNCIÓN CORREGIDA: Generar Excel con mejor manejo de errores para producción
   const downloadExcel = async () => {
     try {
+      console.log("🔄 Iniciando generación de Excel...")
+
       // Verificar si hay datos para generar el Excel
       if (!hasData) {
         toast.error("No hay datos para generar el Excel", {
@@ -740,9 +725,21 @@ export function ReportGenerator() {
         return
       }
 
+      // Verificar si XLSX_STYLE está disponible
+      if (!XLSX_STYLE || !XLSX_STYLE.utils) {
+        console.error("❌ xlsx-js-style no está disponible")
+        toast.error("Error de librería", {
+          description: "La librería Excel no está disponible. Intenta recargar la página.",
+        })
+        return
+      }
+
+      console.log("✅ xlsx-js-style disponible, generando datos...")
+
       // Primero generar el PDF si no existe
       let pdfBlob = generatedPdfBlob
       if (!pdfBlob) {
+        console.log("📄 Generando PDF base...")
         pdfBlob = await generatePDF()
         if (!pdfBlob) {
           toast.error("Error al generar PDF base", {
@@ -751,9 +748,6 @@ export function ReportGenerator() {
           return
         }
       }
-
-      // Importar xlsx-js-style dinámicamente
-      const XLSX_STYLE = await import("xlsx-js-style")
 
       // Crear un nuevo libro de Excel
       const wb = XLSX_STYLE.utils.book_new()
@@ -780,6 +774,10 @@ export function ReportGenerator() {
         const companyAreas = getAreasByCompany()[company.id] || []
         return companyAreas.some((area: Area) => areasWithOrders.includes(area.id))
       })
+
+      console.log(
+        `📊 Procesando ${Object.keys(productsByCategory).length} categorías y ${companiesWithOrders.length} empresas`,
+      )
 
       // MANTENER EL ORDEN ESPECÍFICO (igual que el preview)
       const categoryOrder = [1, 2, 5, 3, 4]
@@ -942,6 +940,7 @@ export function ReportGenerator() {
               })
             }
           })
+
           excelData.push(productRow)
         })
 
@@ -988,7 +987,6 @@ export function ReportGenerator() {
       // SECCIÓN DE OBSERVACIONES CORREGIDA PARA EXCEL
       const observationsByArea = getObservationsByArea()
       const hasObservations = Object.keys(observationsByArea).length > 0
-
       console.log("¿Hay observaciones para Excel?", hasObservations, observationsByArea)
 
       if (hasObservations) {
@@ -1024,7 +1022,6 @@ export function ReportGenerator() {
           // Eliminar duplicados y unir
           const uniqueObservations = [...new Set(allObservations)]
           const observationText = uniqueObservations.join("; ")
-
           console.log(`Observaciones Excel para empresa ${company.name}:`, observationText)
 
           observationRow.push({
@@ -1039,6 +1036,8 @@ export function ReportGenerator() {
         })
         excelData.push(observationRow)
       }
+
+      console.log(`📝 Datos preparados: ${excelData.length} filas`)
 
       // Crear hoja de cálculo
       const ws = XLSX_STYLE.utils.aoa_to_sheet(excelData)
@@ -1059,20 +1058,26 @@ export function ReportGenerator() {
       XLSX_STYLE.utils.book_append_sheet(wb, ws, "Reporte de Productos")
 
       // Generar archivo y descargar
-      XLSX_STYLE.writeFile(wb, `Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.xlsx`)
+      const fileName = `Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.xlsx`
+      console.log(`💾 Descargando archivo: ${fileName}`)
 
+      XLSX_STYLE.writeFile(wb, fileName)
+
+      console.log("✅ Excel generado exitosamente")
       toast.success("Reporte Excel generado", {
         description: "El archivo Excel se ha descargado correctamente basado en el PDF generado.",
       })
     } catch (error) {
-      console.error("Error al generar Excel:", error)
+      console.error("❌ Error al generar Excel:", error)
+      console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace")
+
       toast.error("Error al generar Excel", {
-        description: "No se pudo generar el archivo Excel.",
+        description: `Error: ${error instanceof Error ? error.message : "Error desconocido"}. Revisa la consola para más detalles.`,
       })
     }
   }
 
-  // Modificar la función getProductsForReport para agrupar por categoría
+  // Mantener todas tus otras funciones exactamente igual
   const getProductsForReport = () => {
     // Si tenemos productos reales, usarlos agrupados por categoría
     if (products.length > 0) {
@@ -1115,7 +1120,6 @@ export function ReportGenerator() {
 
     // Datos de demostración mínimos con el orden correcto y propiedades completas
     const demoData: { [categoryId: number]: Product[] } = {}
-
     // IMPORTANTE: Crear el objeto en el orden específico requerido
     // 1=Verduras, 2=Frutas, 5=Hierbas, 3=IGV, 4=Otros
     demoData[1] = [
@@ -1128,7 +1132,6 @@ export function ReportGenerator() {
         categoryId: 1,
       },
     ]
-
     demoData[2] = [
       {
         id: 4,
@@ -1139,7 +1142,6 @@ export function ReportGenerator() {
         categoryId: 2,
       },
     ]
-
     demoData[5] = [
       {
         id: 6,
@@ -1150,7 +1152,6 @@ export function ReportGenerator() {
         categoryId: 5,
       },
     ]
-
     demoData[3] = [
       {
         id: 8,
@@ -1161,7 +1162,6 @@ export function ReportGenerator() {
         categoryId: 3,
       },
     ]
-
     demoData[4] = [
       {
         id: 9,
@@ -1176,7 +1176,6 @@ export function ReportGenerator() {
     return demoData
   }
 
-  // NUEVA FUNCIÓN: Obtener cantidad de producto por empresa (combinando todas las áreas) con colores
   const getProductQuantityByCompany = (productId: number, companyId: number) => {
     const companyAreas = getAreasByCompany()[companyId]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
     if (companyAreas.length === 0) {
@@ -1225,7 +1224,6 @@ export function ReportGenerator() {
       .join(" + ")
   }
 
-  // NUEVA FUNCIÓN: Calcular totales por categoría para toda la empresa
   const calculateCompanyTotalByCategory = (companyId: number, categoryId: number) => {
     const companyAreas = getAreasByCompany()[companyId]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
     if (companyAreas.length === 0) return 0
@@ -1253,11 +1251,9 @@ export function ReportGenerator() {
     return productCount
   }
 
-  // FUNCIÓN CORREGIDA: Renderizar tabla de observaciones por empresa
   const renderObservationsTable = () => {
     const observationsByArea = getObservationsByArea()
     const hasObservations = Object.keys(observationsByArea).length > 0
-
     console.log("Renderizando observaciones en preview:", hasObservations, observationsByArea)
 
     if (!hasObservations) {
@@ -1325,7 +1321,6 @@ export function ReportGenerator() {
                     // Eliminar duplicados y unir
                     const uniqueObservations = [...new Set(allObservations)]
                     const observationText = uniqueObservations.join("; ")
-
                     console.log(`Observaciones preview para empresa ${company.name}:`, observationText)
 
                     return (
@@ -1343,7 +1338,7 @@ export function ReportGenerator() {
     )
   }
 
-  // Modificar la función generatePreview para asegurar que use las fechas seleccionadas
+  // Mantener tu función generatePreview exactamente igual
   const generatePreview = async () => {
     setIsLoading(true)
     setHasData(false)
@@ -1365,7 +1360,6 @@ export function ReportGenerator() {
         // Formatear fechas en ISO8601
         const startDateISO = startOfDay.toISOString()
         const endDateISO = endOfDay.toISOString()
-
         setReportDate(format(selectedDate, "dd/MM/yyyy"))
 
         // Usar la ruta correcta para filtrar por fecha
@@ -1381,7 +1375,6 @@ export function ReportGenerator() {
         // Formatear fechas en ISO8601
         const startDateISO = startOfRange.toISOString()
         const endDateISO = endOfRange.toISOString()
-
         setReportDate(`${format(dateRange.from, "dd/MM/yyyy")} - ${format(dateRange.to, "dd/MM/yyyy")}`)
 
         // Usar la ruta correcta para filtrar por rango de fechas
@@ -1514,6 +1507,7 @@ export function ReportGenerator() {
           order.orderItems.forEach((item) => {
             if (item.productId) {
               // Create a unique key that includes both product ID and unit measurement ID
+              // Create a unique key that includes both product ID and unit measurement ID
               const productKey = item.productId
               if (!quantities[areaId][productKey]) {
                 quantities[areaId][productKey] = 0
@@ -1559,7 +1553,7 @@ export function ReportGenerator() {
     }
   }
 
-  // NUEVA FUNCIÓN: Renderizar tablas por categoría con columnas de empresa
+  // Mantener tu función renderCategoryTables exactamente igual
   const renderCategoryTables = () => {
     const productsByCategory = getProductsForReport()
 
@@ -1703,7 +1697,7 @@ export function ReportGenerator() {
     )
   }
 
-  // Función para manejar la entrada manual de fecha
+  // Mantener tus funciones de manejo de fechas exactamente igual
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const dateValue = e.target.value
     if (dateValue) {
@@ -1717,19 +1711,16 @@ export function ReportGenerator() {
     }
   }
 
-  // Función para manejar la entrada manual de rango de fechas
   const handleDateRangeInputChange = (type: "from" | "to", e: React.ChangeEvent<HTMLInputElement>) => {
     const dateValue = e.target.value
     if (dateValue) {
       const [year, month, day] = dateValue.split("-").map(Number)
       const newDate = new Date(year, month - 1, day)
-
       if (type === "from") {
         setDateRange((prev) => ({ ...prev, from: newDate }))
       } else {
         setDateRange((prev) => ({ ...prev, to: newDate }))
       }
-
       setShowReport(false)
       setHasData(false)
       setGeneratedPdfBlob(null)
@@ -1782,7 +1773,6 @@ export function ReportGenerator() {
                 </SelectContent>
               </Select>
             </div>
-
             {reportType === "day" ? (
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Seleccionar día</label>
@@ -1827,7 +1817,6 @@ export function ReportGenerator() {
                 </div>
               </div>
             )}
-
             <Button
               onClick={() => {
                 console.log(
@@ -1854,7 +1843,6 @@ export function ReportGenerator() {
               )}
             </Button>
           </div>
-
           {/* Vista previa del reporte */}
           {showReport && (
             <div className="mt-4 space-y-4 flex-1 overflow-hidden flex flex-col">
@@ -1882,7 +1870,6 @@ export function ReportGenerator() {
               </div>
             </div>
           )}
-
           {isLoading ? (
             <div className="flex justify-center py-8">
               <div className="flex flex-col items-center">
