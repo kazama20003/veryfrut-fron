@@ -6,23 +6,23 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
-  // Versión simplificada sin tipos de webpack
+  // Configuración simplificada para producción
   webpack: (config, { isServer }) => {
-    // Configuración específica para ExcelJS y XLSX en producción
+    // Configuración específica para librerías de Excel en producción
     config.resolve = config.resolve || {}
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       path: false,
       crypto: false,
+      stream: false,
+      buffer: false,
     }
 
-    // Asegurar que las librerías de Excel se incluyan correctamente
+    // Solo para el cliente
     if (!isServer) {
-      config.externals = config.externals || []
       config.resolve.alias = {
         ...config.resolve.alias,
-        exceljs: require.resolve("exceljs"),
         xlsx: require.resolve("xlsx"),
       }
     }
@@ -30,15 +30,11 @@ const nextConfig: NextConfig = {
     return config
   },
 
-  // Transpile packages para mejor compatibilidad
-  transpilePackages: ["exceljs"],
-
   // Configuración para ignorar errores durante la construcción
   eslint: {
     ignoreDuringBuilds: true,
   },
 
-  // Configuración para ignorar errores de TypeScript durante la construcción
   typescript: {
     ignoreBuildErrors: true,
   },
