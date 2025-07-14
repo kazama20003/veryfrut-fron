@@ -90,41 +90,15 @@ interface Order {
   createdAt?: string
 }
 
-// Interfaz para el tipo de celda de Excel con estilos y rich text
-interface StyledCell {
-  v?: string | number // valor
-  r?: Array<{
-    t: string
-    s: {
-      font: {
-        name: string
-        sz: number
-        bold: boolean
-        color: { rgb: string }
-      }
-    }
-  }> // rich text array
-  t: string // tipo
+// CORREGIR la interfaz RichTextRun con tipos específicos
+interface RichTextRun {
+  t: string // texto
   s: {
-    font?: {
-      bold?: boolean
-      color?: { rgb: string }
-      sz?: number
-      name?: string
-    }
-    fill?: {
-      fgColor: { rgb: string }
-    }
-    alignment?: {
-      horizontal: string
-      vertical?: string
-      wrapText?: boolean
-    }
-    border?: {
-      top?: { style: string; color?: { rgb: string } }
-      left?: { style: string; color?: { rgb: string } }
-      bottom?: { style: string; color?: { rgb: string } }
-      right?: { style: string; color?: { rgb: string } }
+    font: {
+      name: string
+      sz: number
+      bold: boolean
+      color: { rgb: string }
     }
   }
 }
@@ -143,7 +117,6 @@ export function ReportGenerator() {
   const [hasData, setHasData] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
-  const [generatedPdfBlob, setGeneratedPdfBlob] = useState<Blob | null>(null)
 
   // Estados para datos reales
   const [companies, setCompanies] = useState<Company[]>([])
@@ -202,6 +175,7 @@ export function ReportGenerator() {
             category: categoriesMap[product.categoryId || 0],
           }
         })
+
         setProducts(productsWithUnits)
       } catch (error) {
         console.error("Error al cargar datos iniciales:", error)
@@ -214,7 +188,7 @@ export function ReportGenerator() {
     loadInitialData()
   }, [])
 
-  // Función para convertir color hexadecimal a RGB para Excel
+  // Función para convertir color hexadecimal a RGB para Excel (VERIFICAR QUE ESTÉ CORRECTA)
   const hexToRgb = (hex: string): string => {
     // Remover el # si está presente
     const cleanHex = hex.replace("#", "")
@@ -229,6 +203,22 @@ export function ReportGenerator() {
     return fullHex.toUpperCase()
   }
 
+  // Función para convertir color hexadecimal a ARGB para ExcelJS
+  const hexToArgb = (hex: string): string => {
+    // Remover el # si está presente
+    const cleanHex = hex.replace("#", "")
+    // Si es un color de 3 caracteres, expandirlo a 6
+    const fullHex =
+      cleanHex.length === 3
+        ? cleanHex
+            .split("")
+            .map((char) => char + char)
+            .join("")
+        : cleanHex
+    // Agregar alpha FF al inicio para ARGB
+    return `FF${fullHex.toUpperCase()}`
+  }
+
   // Función para determinar si el texto debe ser blanco o negro basado en el color de fondo
   const getTextColor = (): string => {
     // Siempre usar texto negro
@@ -238,7 +228,6 @@ export function ReportGenerator() {
   // Función CORREGIDA para obtener observaciones por área
   const getObservationsByArea = () => {
     const observationsByArea: { [areaId: number]: string[] } = {}
-
     console.log("Procesando observaciones de órdenes:", orders.length)
 
     orders.forEach((order) => {
@@ -265,29 +254,35 @@ export function ReportGenerator() {
   // Agrupar áreas por compañía
   const getAreasByCompany = () => {
     const areasByCompany: { [companyId: number]: Area[] } = {}
+
     companies.forEach((company) => {
       areasByCompany[company.id] = []
     })
+
     areas.forEach((area) => {
       if (area.companyId && areasByCompany[area.companyId]) {
         areasByCompany[area.companyId].push(area)
       }
     })
+
     return areasByCompany
   }
 
-  // FUNCIÓN CORREGIDA: Obtener cantidad de producto por empresa para Excel con COLORES POR ÁREA
-  const getProductQuantityForExcel = (productId: number, companyId: number) => {
+  // FUNCIÓN COMPLETAMENTE CORREGIDA para rich text en Excel
+  const getProductQuantityForExcelRichText = (
+    productId: number,
+    companyId: number,
+  ): { richText: RichTextRun[]; hasData: boolean } => {
     const companyAreas = getAreasByCompany()[companyId]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+
     if (companyAreas.length === 0) {
-      return { text: "", color: "000000", hasData: false }
+      return { richText: [], hasData: false }
     }
 
-    const quantities: string[] = []
-    let dominantColor = "000000"
+    const richTextRuns: RichTextRun[] = []
 
     // Buscar cantidades en cada área de la empresa
-    companyAreas.forEach((area, index) => {
+    companyAreas.forEach((area) => {
       if (productQuantities[area.id] && productQuantities[area.id][productId]) {
         // Buscar en las órdenes los items con este productId y areaId
         let foundInOrders = false
@@ -296,39 +291,81 @@ export function ReportGenerator() {
             for (const item of order.orderItems) {
               if (item.productId === productId) {
                 const unit = item.unitMeasurement?.name || ""
-                quantities.push(`${item.quantity}${unit}`)
-                // Usar el color de la primera área como dominante
-                if (index === 0) {
-                  dominantColor = hexToRgb(area.color)
+                const quantityText = `${item.quantity}${unit}`
+
+                // Agregar separador si no es el primer elemento
+                if (richTextRuns.length > 0) {
+                  richTextRuns.push({
+                    t: " + ",
+                    s: {
+                      font: {
+                        name: "Calibri",
+                        sz: 11,
+                        bold: false,
+                        color: { rgb: "000000" },
+                      },
+                    },
+                  })
                 }
+
+                // Agregar la cantidad con el color del área (formato correcto)
+                const areaColorRgb = hexToRgb(area.color)
+                richTextRuns.push({
+                  t: quantityText,
+                  s: {
+                    font: {
+                      name: "Calibri",
+                      sz: 11,
+                      bold: true,
+                      color: { rgb: areaColorRgb },
+                    },
+                  },
+                })
                 foundInOrders = true
               }
             }
           }
         }
+
         // Si no encontramos nada en las órdenes, usar la cantidad del estado
         if (!foundInOrders && productQuantities[area.id][productId]) {
           const product = products.find((p) => p.id === productId)
           const unit = product?.unitMeasurement?.name || ""
-          quantities.push(`${productQuantities[area.id][productId]}${unit}`)
-          // Usar el color de la primera área como dominante
-          if (index === 0) {
-            dominantColor = hexToRgb(area.color)
+          const quantityText = `${productQuantities[area.id][productId]}${unit}`
+
+          // Agregar separador si no es el primer elemento
+          if (richTextRuns.length > 0) {
+            richTextRuns.push({
+              t: " + ",
+              s: {
+                font: {
+                  name: "Calibri",
+                  sz: 11,
+                  bold: false,
+                  color: { rgb: "000000" },
+                },
+              },
+            })
           }
+
+          // Agregar la cantidad con el color del área (formato correcto)
+          const areaColorRgb = hexToRgb(area.color)
+          richTextRuns.push({
+            t: quantityText,
+            s: {
+              font: {
+                name: "Calibri",
+                sz: 11,
+                bold: true,
+                color: { rgb: areaColorRgb },
+              },
+            },
+          })
         }
       }
     })
 
-    if (quantities.length === 0) {
-      return { text: "", color: "000000", hasData: false }
-    }
-
-    // Retornar texto simple concatenado con color dominante
-    return {
-      text: quantities.join(" + "),
-      color: dominantColor,
-      hasData: true,
-    }
+    return { richText: richTextRuns, hasData: richTextRuns.length > 0 }
   }
 
   // Función para generar PDF igual que el preview - VERSIÓN SIMPLE SIN AUTOTABLE
@@ -602,7 +639,6 @@ export function ReportGenerator() {
       // SECCIÓN DE OBSERVACIONES CORREGIDA
       const observationsByArea = getObservationsByArea()
       const hasObservations = Object.keys(observationsByArea).length > 0
-
       console.log("¿Hay observaciones para PDF?", hasObservations, observationsByArea)
 
       if (hasObservations) {
@@ -678,7 +714,6 @@ export function ReportGenerator() {
 
           const uniqueObservations = [...new Set(allObservations)]
           const observationText = uniqueObservations.join("; ")
-
           console.log(`Observaciones para empresa ${company.name}:`, observationText)
 
           // Dividir texto largo en múltiples líneas
@@ -696,10 +731,6 @@ export function ReportGenerator() {
         })
       }
 
-      // Generar blob del PDF
-      const pdfBlob = doc.output("blob")
-      setGeneratedPdfBlob(pdfBlob)
-
       // Descargar PDF
       doc.save(`Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.pdf`)
 
@@ -707,7 +738,7 @@ export function ReportGenerator() {
         description: "El archivo PDF se ha descargado correctamente.",
       })
 
-      return pdfBlob
+      return doc.output("blob")
     } catch (error) {
       console.error("Error al generar PDF:", error)
       toast.error("Error al generar PDF", {
@@ -729,7 +760,7 @@ export function ReportGenerator() {
     await generatePDF()
   }
 
-  // Generar y descargar Excel - VERSIÓN CORREGIDA que primero genera PDF
+  // NUEVA FUNCIÓN: Generar y descargar Excel con ExcelJS y RICH TEXT
   const downloadExcel = async () => {
     try {
       // Verificar si hay datos para generar el Excel
@@ -740,37 +771,12 @@ export function ReportGenerator() {
         return
       }
 
-      // Primero generar el PDF si no existe
-      let pdfBlob = generatedPdfBlob
-      if (!pdfBlob) {
-        pdfBlob = await generatePDF()
-        if (!pdfBlob) {
-          toast.error("Error al generar PDF base", {
-            description: "No se pudo generar el PDF necesario para crear el Excel.",
-          })
-          return
-        }
-      }
-
-      // Importar xlsx-js-style dinámicamente
-      const XLSX_STYLE = await import("xlsx-js-style")
+      // Importar ExcelJS dinámicamente
+      const ExcelJS = await import("exceljs")
 
       // Crear un nuevo libro de Excel
-      const wb = XLSX_STYLE.utils.book_new()
-
-      // Crear datos para el Excel con estilos
-      const excelData: StyledCell[][] = []
-
-      // Estilo base para todas las celdas
-      const baseStyle = {
-        font: { name: "Calibri", sz: 11, bold: false },
-        border: {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        },
-      }
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet("Reporte de Productos")
 
       // Obtener productos agrupados por categoría (igual que el preview)
       const productsByCategory = getProductsForReport()
@@ -797,6 +803,8 @@ export function ReportGenerator() {
         }
       })
 
+      let currentRow = 1
+
       // Procesar cada categoría (replicando exactamente el preview)
       orderedCategoryEntries.forEach(([categoryIdStr, categoryProducts]) => {
         const categoryId = Number.parseInt(categoryIdStr)
@@ -819,197 +827,206 @@ export function ReportGenerator() {
         if (productsWithOrders.length === 0) return
 
         // Agregar fila de fecha (igual que el preview)
-        const dateRow: StyledCell[] = [
-          {
-            v: `fecha: ${reportDate}`,
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "FFFFFF" } },
-            },
-          },
-        ]
+        const dateCell = worksheet.getCell(currentRow, 1)
+        dateCell.value = `fecha: ${reportDate}`
+        dateCell.font = { name: "Calibri", size: 11, bold: true }
+        dateCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+        dateCell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }
 
         // Rellenar el resto de columnas para la fecha
-        companiesWithOrders.forEach(() => {
-          dateRow.push({
-            v: "",
-            t: "s",
-            s: {
-              ...baseStyle,
-              fill: { fgColor: { rgb: "FFFFFF" } },
-            },
-          })
-        })
-        excelData.push(dateRow)
+        for (let col = 2; col <= companiesWithOrders.length + 1; col++) {
+          const cell = worksheet.getCell(currentRow, col)
+          cell.value = ""
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          }
+        }
+        currentRow++
 
         // Preparar la fila de encabezados de compañías (igual que el preview)
-        const companyRow: StyledCell[] = [
-          {
-            v: categoryName.toUpperCase(),
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "F2F2F2" } },
-            },
-          },
-        ]
+        const categoryCell = worksheet.getCell(currentRow, 1)
+        categoryCell.value = categoryName.toUpperCase()
+        categoryCell.font = { name: "Calibri", size: 11, bold: true }
+        categoryCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }
+        categoryCell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }
 
         // Agregar compañías a la fila de encabezado (igual que el preview)
+        let colIndex = 2
         companiesWithOrders.forEach((company) => {
           // Filtrar solo áreas con pedidos para verificar si la empresa tiene pedidos
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+
           if (companyAreas.length === 0) {
             return // Saltar esta compañía si no tiene áreas con pedidos
           }
 
           // Usar el color de la empresa si está disponible, sino el color de la primera área
-          const companyColor = company.color ? hexToRgb(company.color) : hexToRgb(companyAreas[0]?.color || "#CCCCCC")
+          const companyColor = company.color ? hexToArgb(company.color) : hexToArgb(companyAreas[0]?.color || "#CCCCCC")
 
           // Agregar la compañía
-          companyRow.push({
-            v: company.name.toUpperCase(),
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true, color: { rgb: "000000" } },
-              fill: { fgColor: { rgb: companyColor } },
-              alignment: { horizontal: "center" },
-            },
-          })
+          const companyCell = worksheet.getCell(currentRow, colIndex)
+          companyCell.value = company.name.toUpperCase()
+          companyCell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF000000" } }
+          companyCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: companyColor } }
+          companyCell.alignment = { horizontal: "center" }
+          companyCell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          }
+
+          colIndex++
         })
-        excelData.push(companyRow)
 
-        // Agregar productos de esta categoría (igual que el preview)
+        currentRow++
+
+        // Agregar productos de esta categoría (AQUÍ ESTÁ EL RICH TEXT CON ExcelJS)
         productsWithOrders.forEach((product: Product) => {
-          const productRow: StyledCell[] = [
-            {
-              v: product.name,
-              t: "s",
-              s: {
-                ...baseStyle,
-                fill: { fgColor: { rgb: "FFFFFF" } },
-                alignment: { horizontal: "left" },
-              },
-            },
-          ]
+          // Nombre del producto
+          const productCell = worksheet.getCell(currentRow, 1)
+          productCell.value = product.name
+          productCell.font = { name: "Calibri", size: 11 }
+          productCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+          productCell.alignment = { horizontal: "left" }
+          productCell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          }
 
-          // Agregar cantidades por empresa (MÉTODO SIMPLE QUE SÍ FUNCIONA)
+          // Agregar cantidades por empresa usando RICH TEXT DE ExcelJS
+          colIndex = 2
           companiesWithOrders.forEach((company) => {
             const companyAreas =
               getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+
             if (companyAreas.length === 0) {
               return // Saltar esta compañía si no tiene áreas con pedidos
             }
 
-            // Obtener la cantidad como texto simple con color
-            const quantityInfo = getProductQuantityForExcel(product.id, company.id)
-            if (quantityInfo.hasData && quantityInfo.text) {
-              productRow.push({
-                v: quantityInfo.text, // TEXTO SIMPLE QUE SÍ SE VE
-                t: "s",
-                s: {
-                  ...baseStyle,
+            // Obtener rich text runs para esta celda
+            const { richText, hasData } = getProductQuantityForExcelRichText(product.id, company.id)
+
+            const quantityCell = worksheet.getCell(currentRow, colIndex)
+
+            if (hasData && richText.length > 0) {
+              // USAR RICH TEXT DE ExcelJS CORRECTAMENTE
+              quantityCell.value = {
+                richText: richText.map((run) => ({
+                  text: run.t,
                   font: {
-                    ...baseStyle.font,
-                    bold: true,
-                    color: { rgb: quantityInfo.color }, // Color dominante del área
-                    sz: 12,
+                    name: run.s.font.name,
+                    size: run.s.font.sz,
+                    bold: run.s.font.bold,
+                    color: { argb: hexToArgb(`#${run.s.font.color.rgb}`) },
                   },
-                  fill: { fgColor: { rgb: "FFFFFF" } },
-                  alignment: { horizontal: "left" },
-                  border: {
-                    top: { style: "thin", color: { rgb: "000000" } },
-                    left: { style: "thin", color: { rgb: "000000" } },
-                    bottom: { style: "thin", color: { rgb: "000000" } },
-                    right: { style: "thin", color: { rgb: "000000" } },
-                  },
-                },
-              })
+                })),
+              }
             } else {
               // Celda vacía si no hay cantidades
-              productRow.push({
-                v: "",
-                t: "s",
-                s: {
-                  ...baseStyle,
-                  fill: { fgColor: { rgb: "FFFFFF" } },
-                  alignment: { horizontal: "left" },
-                },
-              })
+              quantityCell.value = ""
             }
+
+            quantityCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+            quantityCell.alignment = { horizontal: "left" }
+            quantityCell.border = {
+              top: { style: "thin" },
+              left: { style: "thin" },
+              bottom: { style: "thin" },
+              right: { style: "thin" },
+            }
+
+            colIndex++
           })
-          excelData.push(productRow)
+
+          currentRow++
         })
 
         // Agregar fila de totales para esta categoría (igual que el preview)
-        const totalRow: StyledCell[] = [
-          {
-            v: "TOTAL",
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "FFFFFF" } },
-              alignment: { horizontal: "left" },
-            },
-          },
-        ]
+        const totalCell = worksheet.getCell(currentRow, 1)
+        totalCell.value = "TOTAL"
+        totalCell.font = { name: "Calibri", size: 11, bold: true }
+        totalCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+        totalCell.alignment = { horizontal: "left" }
+        totalCell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }
 
+        colIndex = 2
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+
           if (companyAreas.length === 0) {
             return // Saltar esta compañía si no tiene áreas con pedidos
           }
 
           // Calcular total contando productos únicos para esta categoría en toda la empresa
           const total = calculateCompanyTotalByCategory(company.id, categoryId)
-          totalRow.push({
-            v: total ? `${total}` : "0",
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              alignment: { horizontal: "left" },
-              fill: { fgColor: { rgb: "FFFFFF" } },
-            },
-          })
-        })
-        excelData.push(totalRow)
 
-        // Agregar fila vacía para separación entre categorías
-        excelData.push([])
+          const totalValueCell = worksheet.getCell(currentRow, colIndex)
+          totalValueCell.value = total ? `${total}` : "0"
+          totalValueCell.font = { name: "Calibri", size: 11, bold: true }
+          totalValueCell.alignment = { horizontal: "left" }
+          totalValueCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+          totalValueCell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          }
+
+          colIndex++
+        })
+
+        currentRow += 2 // Espacio entre categorías
       })
 
-      // SECCIÓN DE OBSERVACIONES CORREGIDA PARA EXCEL
+      // SECCIÓN DE OBSERVACIONES CORREGIDA PARA ExcelJS
       const observationsByArea = getObservationsByArea()
       const hasObservations = Object.keys(observationsByArea).length > 0
-
       console.log("¿Hay observaciones para Excel?", hasObservations, observationsByArea)
 
       if (hasObservations) {
         // Fila de observaciones
-        const observationRow: StyledCell[] = [
-          {
-            v: "OBSERVACION",
-            t: "s",
-            s: {
-              ...baseStyle,
-              font: { ...baseStyle.font, bold: true },
-              fill: { fgColor: { rgb: "FFFF00" } }, // Amarillo
-              alignment: { horizontal: "left" },
-            },
-          },
-        ]
+        const observationHeaderCell = worksheet.getCell(currentRow, 1)
+        observationHeaderCell.value = "OBSERVACION"
+        observationHeaderCell.font = { name: "Calibri", size: 11, bold: true }
+        observationHeaderCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } } // Amarillo
+        observationHeaderCell.alignment = { horizontal: "left" }
+        observationHeaderCell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }
 
         // Agregar observaciones por empresa (igual que el preview)
+        let colIndex = 2
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+
           if (companyAreas.length === 0) {
             return
           }
@@ -1024,45 +1041,48 @@ export function ReportGenerator() {
           // Eliminar duplicados y unir
           const uniqueObservations = [...new Set(allObservations)]
           const observationText = uniqueObservations.join("; ")
-
           console.log(`Observaciones Excel para empresa ${company.name}:`, observationText)
 
-          observationRow.push({
-            v: observationText,
-            t: "s",
-            s: {
-              ...baseStyle,
-              fill: { fgColor: { rgb: "FFFF99" } }, // Amarillo claro
-              alignment: { horizontal: "left", wrapText: true },
-            },
-          })
+          const observationCell = worksheet.getCell(currentRow, colIndex)
+          observationCell.value = observationText
+          observationCell.font = { name: "Calibri", size: 11 }
+          observationCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF99" } } // Amarillo claro
+          observationCell.alignment = { horizontal: "left", wrapText: true }
+          observationCell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          }
+
+          colIndex++
         })
-        excelData.push(observationRow)
       }
 
-      // Crear hoja de cálculo
-      const ws = XLSX_STYLE.utils.aoa_to_sheet(excelData)
-
       // Definir anchos de columna
-      const wscols = [
-        { wch: 40 }, // Nombre del producto/categoría
-      ]
+      worksheet.getColumn(1).width = 40 // Nombre del producto/categoría
 
       // Agregar anchos para las columnas de empresas
-      companiesWithOrders.forEach(() => {
-        wscols.push({ wch: 25 }) // Ancho para empresa
-      })
-
-      ws["!cols"] = wscols
-
-      // Agregar hoja al libro con nombre único
-      XLSX_STYLE.utils.book_append_sheet(wb, ws, "Reporte de Productos")
+      for (let col = 2; col <= companiesWithOrders.length + 1; col++) {
+        worksheet.getColumn(col).width = 25 // Ancho para empresa
+      }
 
       // Generar archivo y descargar
-      XLSX_STYLE.writeFile(wb, `Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.xlsx`)
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+
+      // Crear enlace de descarga
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `Reporte_Productos_${reportDate.replace(/\//g, "-").replace(/\s/g, "_")}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
 
       toast.success("Reporte Excel generado", {
-        description: "El archivo Excel se ha descargado correctamente basado en el PDF generado.",
+        description: "El archivo Excel se ha descargado correctamente con colores por área usando ExcelJS.",
       })
     } catch (error) {
       console.error("Error al generar Excel:", error)
@@ -1078,6 +1098,7 @@ export function ReportGenerator() {
     if (products.length > 0) {
       // Agrupar productos por categoría
       const productsByCategory: { [categoryId: number]: Product[] } = {}
+
       products.forEach((product) => {
         const categoryId = product.categoryId || 0
         if (!productsByCategory[categoryId]) {
@@ -1179,6 +1200,7 @@ export function ReportGenerator() {
   // NUEVA FUNCIÓN: Obtener cantidad de producto por empresa (combinando todas las áreas) con colores
   const getProductQuantityByCompany = (productId: number, companyId: number) => {
     const companyAreas = getAreasByCompany()[companyId]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
+
     if (companyAreas.length === 0) {
       return ""
     }
@@ -1257,7 +1279,6 @@ export function ReportGenerator() {
   const renderObservationsTable = () => {
     const observationsByArea = getObservationsByArea()
     const hasObservations = Object.keys(observationsByArea).length > 0
-
     console.log("Renderizando observaciones en preview:", hasObservations, observationsByArea)
 
     if (!hasObservations) {
@@ -1325,7 +1346,6 @@ export function ReportGenerator() {
                     // Eliminar duplicados y unir
                     const uniqueObservations = [...new Set(allObservations)]
                     const observationText = uniqueObservations.join("; ")
-
                     console.log(`Observaciones preview para empresa ${company.name}:`, observationText)
 
                     return (
@@ -1348,7 +1368,6 @@ export function ReportGenerator() {
     setIsLoading(true)
     setHasData(false)
     setShowReport(false)
-    setGeneratedPdfBlob(null) // Limpiar PDF anterior
 
     try {
       // Establecer la fecha del reporte según el tipo
@@ -1712,7 +1731,6 @@ export function ReportGenerator() {
       setSelectedDate(newDate)
       setShowReport(false)
       setHasData(false)
-      setGeneratedPdfBlob(null)
       console.log("Fecha seleccionada manualmente:", format(newDate, "yyyy-MM-dd"))
     }
   }
@@ -1723,16 +1741,13 @@ export function ReportGenerator() {
     if (dateValue) {
       const [year, month, day] = dateValue.split("-").map(Number)
       const newDate = new Date(year, month - 1, day)
-
       if (type === "from") {
         setDateRange((prev) => ({ ...prev, from: newDate }))
       } else {
         setDateRange((prev) => ({ ...prev, to: newDate }))
       }
-
       setShowReport(false)
       setHasData(false)
-      setGeneratedPdfBlob(null)
       console.log(`Fecha ${type} seleccionada manualmente:`, format(newDate, "yyyy-MM-dd"))
     }
   }
@@ -1770,7 +1785,6 @@ export function ReportGenerator() {
                   // Resetear el reporte al cambiar el tipo
                   setShowReport(false)
                   setHasData(false)
-                  setGeneratedPdfBlob(null)
                 }}
               >
                 <SelectTrigger>
@@ -1875,9 +1889,8 @@ export function ReportGenerator() {
               <div className="text-sm text-muted-foreground">
                 <div className="mb-2">Reporte para: {reportDate}</div>
                 <div className="text-xs">
-                  <strong>Nota:</strong> Las cantidades están coloreadas por área dentro de cada empresa. El PDF se
-                  genera con el mismo contenido que el preview, y el Excel se basa en el PDF generado con colores
-                  representativos de las empresas.
+                  <strong>Nota:</strong> Las cantidades están coloreadas por área dentro de cada empresa. El Excel ahora
+                  se genera con RICH TEXT para mostrar exactamente los mismos colores que el preview.
                 </div>
               </div>
             </div>
