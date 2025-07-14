@@ -821,14 +821,7 @@ export default function NewOrderPage() {
                           <div className="font-medium text-sm">
                             {result.productName} - {result.unitMeasurementName}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            Stock: {result.stock}
-                            {result.stock < 10 && (
-                              <Badge variant="destructive" className="text-xs px-1 py-0 ml-2">
-                                Bajo stock
-                              </Badge>
-                            )}
-                          </div>
+      
                         </div>
                         <Plus className="h-4 w-4 text-green-600" />
                       </div>
@@ -884,7 +877,7 @@ export default function NewOrderPage() {
                                       <span>
                                         {product.name} - {unit.unitMeasurement.name}
                                       </span>
-                                      <span className="text-xs text-muted-foreground">Stock: {product.stock}</span>
+                                
                                     </div>
                                   </SelectItem>
                                 )),
