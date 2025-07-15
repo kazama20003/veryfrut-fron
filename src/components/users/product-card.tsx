@@ -77,11 +77,11 @@ interface ProductCardProps {
 const QUANTITY_LIMITS = {
   MIN: 0.01,
   MAX: 999.99,
-  STEP: 0.01,
+  STEP: 0.25, // Cambiar de 0.01 a 0.25
   DECIMALS: 2,
 } as const
 
-const QUANTITY_PRESETS = [0.01, 0.1, 0.5, 1, 5, 10] as const
+const QUANTITY_PRESETS = [0.1, 0.25, 0.5, 1, 5, 10, 100] as const // Nuevos presets
 
 // Star Rating Component
 const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) => {
@@ -113,13 +113,14 @@ const useQuantityManager = (initialQuantity = 1) => {
     if (qty % 1 === 0) {
       return qty.toFixed(0)
     }
+    // Mostrar hasta 2 decimales para cantidades como 0.25, 0.5, etc.
     return Number.parseFloat(qty.toFixed(QUANTITY_LIMITS.DECIMALS)).toString().replace(".", ",")
   }, [])
 
   const updateQuantity = useCallback(
     (newQuantity: number) => {
       if (newQuantity >= QUANTITY_LIMITS.MIN && newQuantity <= QUANTITY_LIMITS.MAX) {
-        const roundedQuantity = Math.round(newQuantity * 100) / 100
+        const roundedQuantity = Math.round(newQuantity * 1000) / 1000 // Redondear a 3 decimales
         setQuantity(roundedQuantity)
         setQuantityInput(formatQuantity(roundedQuantity))
         return true
@@ -131,13 +132,13 @@ const useQuantityManager = (initialQuantity = 1) => {
 
   const handleInputChange = useCallback((value: string) => {
     const normalizedValue = value.replace(",", ".")
-    const regex = /^\d*\.?\d{0,2}$/
+    const regex = /^\d*\.?\d{0,3}$/ // Permitir hasta 3 decimales
     if (regex.test(normalizedValue) || value === "") {
       setQuantityInput(value)
       if (value !== "") {
         const numValue = Number.parseFloat(normalizedValue)
         if (!isNaN(numValue) && numValue > 0) {
-          const roundedValue = Math.round(numValue * 100) / 100
+          const roundedValue = Math.round(numValue * 1000) / 1000 // Redondear a 3 decimales
           setQuantity(roundedValue)
         }
       }
@@ -281,7 +282,9 @@ const MobileQuantityModal = ({
             <Plus className="h-5 w-5" />
           </Button>
         </div>
-        <div className="grid grid-cols-3 gap-2 mb-6">
+        <div className="grid grid-cols-4 gap-2 mb-6">
+          {" "}
+          {/* Cambiar de 3 a 4 columnas para acomodar más opciones */}
           {QUANTITY_PRESETS.map((preset) => (
             <Button
               key={preset}
