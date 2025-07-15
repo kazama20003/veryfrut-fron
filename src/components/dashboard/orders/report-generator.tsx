@@ -234,7 +234,6 @@ export function ReportGenerator() {
       if (order.observation && order.observation.trim()) {
         const areaId = order.areaId || order.area?.id
         console.log(`Orden ${order.id}: observación="${order.observation}", areaId=${areaId}`)
-
         if (areaId) {
           if (!observationsByArea[areaId]) {
             observationsByArea[areaId] = []
@@ -254,7 +253,6 @@ export function ReportGenerator() {
   // Agrupar áreas por compañía
   const getAreasByCompany = () => {
     const areasByCompany: { [companyId: number]: Area[] } = {}
-
     companies.forEach((company) => {
       areasByCompany[company.id] = []
     })
@@ -274,7 +272,6 @@ export function ReportGenerator() {
     companyId: number,
   ): { richText: RichTextRun[]; hasData: boolean } => {
     const companyAreas = getAreasByCompany()[companyId]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-
     if (companyAreas.length === 0) {
       return { richText: [], hasData: false }
     }
@@ -300,7 +297,7 @@ export function ReportGenerator() {
                     s: {
                       font: {
                         name: "Calibri",
-                        sz: 11,
+                        sz: 16,
                         bold: false,
                         color: { rgb: "000000" },
                       },
@@ -315,7 +312,7 @@ export function ReportGenerator() {
                   s: {
                     font: {
                       name: "Calibri",
-                      sz: 11,
+                      sz: 16,
                       bold: true,
                       color: { rgb: areaColorRgb },
                     },
@@ -340,7 +337,7 @@ export function ReportGenerator() {
               s: {
                 font: {
                   name: "Calibri",
-                  sz: 11,
+                  sz: 16,
                   bold: false,
                   color: { rgb: "000000" },
                 },
@@ -355,7 +352,7 @@ export function ReportGenerator() {
             s: {
               font: {
                 name: "Calibri",
-                sz: 11,
+                sz: 16,
                 bold: true,
                 color: { rgb: areaColorRgb },
               },
@@ -756,7 +753,6 @@ export function ReportGenerator() {
       })
       return
     }
-
     await generatePDF()
   }
 
@@ -778,14 +774,43 @@ export function ReportGenerator() {
       const workbook = new ExcelJS.Workbook()
       const worksheet = workbook.addWorksheet("Reporte de Productos")
 
-      // Obtener productos agrupados por categoría (igual que el preview)
-      const productsByCategory = getProductsForReport()
+      // Después de crear el worksheet y antes del loop de categorías, agregar:
+      // Agregar fila de fecha SOLO UNA VEZ al inicio
+      const dateCell = worksheet.getCell(1, 1)
+      dateCell.value = `fecha: ${reportDate}`
+      dateCell.font = { name: "Calibri", size: 16, bold: true }
+      dateCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+      dateCell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      }
 
-      // Filtrar compañías que tienen áreas con pedidos (igual que el preview)
+      // Rellenar el resto de columnas para la fecha
       const companiesWithOrders = companies.filter((company) => {
         const companyAreas = getAreasByCompany()[company.id] || []
         return companyAreas.some((area: Area) => areasWithOrders.includes(area.id))
       })
+      for (let col = 2; col <= companiesWithOrders.length + 1; col++) {
+        const cell = worksheet.getCell(1, col)
+        cell.value = ""
+        cell.font = { name: "Calibri", size: 16 }
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }
+      }
+
+      let currentRow = 3 // Empezar desde la fila 3 (después de fecha y espacio)
+
+      // Obtener productos agrupados por categoría (igual que el preview)
+      const productsByCategory = getProductsForReport()
+
+      // Filtrar compañías que tienen áreas con pedidos (igual que el preview)
 
       // MANTENER EL ORDEN ESPECÍFICO (igual que el preview)
       const categoryOrder = [1, 2, 5, 3, 4]
@@ -802,8 +827,6 @@ export function ReportGenerator() {
           orderedCategoryEntries.push([categoryIdStr, categoryProducts as Product[]])
         }
       })
-
-      let currentRow = 1
 
       // Procesar cada categoría (replicando exactamente el preview)
       orderedCategoryEntries.forEach(([categoryIdStr, categoryProducts]) => {
@@ -826,36 +849,10 @@ export function ReportGenerator() {
         // Si no hay productos con pedidos en esta categoría, omitir
         if (productsWithOrders.length === 0) return
 
-        // Agregar fila de fecha (igual que el preview)
-        const dateCell = worksheet.getCell(currentRow, 1)
-        dateCell.value = `fecha: ${reportDate}`
-        dateCell.font = { name: "Calibri", size: 11, bold: true }
-        dateCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
-        dateCell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        }
-
-        // Rellenar el resto de columnas para la fecha
-        for (let col = 2; col <= companiesWithOrders.length + 1; col++) {
-          const cell = worksheet.getCell(currentRow, col)
-          cell.value = ""
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
-          cell.border = {
-            top: { style: "thin" },
-            left: { style: "thin" },
-            bottom: { style: "thin" },
-            right: { style: "thin" },
-          }
-        }
-        currentRow++
-
         // Preparar la fila de encabezados de compañías (igual que el preview)
         const categoryCell = worksheet.getCell(currentRow, 1)
         categoryCell.value = categoryName.toUpperCase()
-        categoryCell.font = { name: "Calibri", size: 11, bold: true }
+        categoryCell.font = { name: "Calibri", size: 16, bold: true }
         categoryCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F2F2" } }
         categoryCell.border = {
           top: { style: "thin" },
@@ -870,7 +867,6 @@ export function ReportGenerator() {
           // Filtrar solo áreas con pedidos para verificar si la empresa tiene pedidos
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-
           if (companyAreas.length === 0) {
             return // Saltar esta compañía si no tiene áreas con pedidos
           }
@@ -881,7 +877,7 @@ export function ReportGenerator() {
           // Agregar la compañía
           const companyCell = worksheet.getCell(currentRow, colIndex)
           companyCell.value = company.name.toUpperCase()
-          companyCell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF000000" } }
+          companyCell.font = { name: "Calibri", size: 16, bold: true, color: { argb: "FF000000" } }
           companyCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: companyColor } }
           companyCell.alignment = { horizontal: "center" }
           companyCell.border = {
@@ -890,7 +886,6 @@ export function ReportGenerator() {
             bottom: { style: "thin" },
             right: { style: "thin" },
           }
-
           colIndex++
         })
 
@@ -901,7 +896,7 @@ export function ReportGenerator() {
           // Nombre del producto
           const productCell = worksheet.getCell(currentRow, 1)
           productCell.value = product.name
-          productCell.font = { name: "Calibri", size: 11 }
+          productCell.font = { name: "Calibri", size: 16 }
           productCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
           productCell.alignment = { horizontal: "left" }
           productCell.border = {
@@ -916,7 +911,6 @@ export function ReportGenerator() {
           companiesWithOrders.forEach((company) => {
             const companyAreas =
               getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-
             if (companyAreas.length === 0) {
               return // Saltar esta compañía si no tiene áreas con pedidos
             }
@@ -933,7 +927,7 @@ export function ReportGenerator() {
                   text: run.t,
                   font: {
                     name: run.s.font.name,
-                    size: run.s.font.sz,
+                    size: 16,
                     bold: run.s.font.bold,
                     color: { argb: hexToArgb(`#${run.s.font.color.rgb}`) },
                   },
@@ -952,7 +946,6 @@ export function ReportGenerator() {
               bottom: { style: "thin" },
               right: { style: "thin" },
             }
-
             colIndex++
           })
 
@@ -962,7 +955,7 @@ export function ReportGenerator() {
         // Agregar fila de totales para esta categoría (igual que el preview)
         const totalCell = worksheet.getCell(currentRow, 1)
         totalCell.value = "TOTAL"
-        totalCell.font = { name: "Calibri", size: 11, bold: true }
+        totalCell.font = { name: "Calibri", size: 16, bold: true }
         totalCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
         totalCell.alignment = { horizontal: "left" }
         totalCell.border = {
@@ -976,17 +969,15 @@ export function ReportGenerator() {
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-
           if (companyAreas.length === 0) {
             return // Saltar esta compañía si no tiene áreas con pedidos
           }
 
           // Calcular total contando productos únicos para esta categoría en toda la empresa
           const total = calculateCompanyTotalByCategory(company.id, categoryId)
-
           const totalValueCell = worksheet.getCell(currentRow, colIndex)
           totalValueCell.value = total ? `${total}` : "0"
-          totalValueCell.font = { name: "Calibri", size: 11, bold: true }
+          totalValueCell.font = { name: "Calibri", size: 16, bold: true }
           totalValueCell.alignment = { horizontal: "left" }
           totalValueCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } }
           totalValueCell.border = {
@@ -995,7 +986,6 @@ export function ReportGenerator() {
             bottom: { style: "thin" },
             right: { style: "thin" },
           }
-
           colIndex++
         })
 
@@ -1011,7 +1001,7 @@ export function ReportGenerator() {
         // Fila de observaciones
         const observationHeaderCell = worksheet.getCell(currentRow, 1)
         observationHeaderCell.value = "OBSERVACION"
-        observationHeaderCell.font = { name: "Calibri", size: 11, bold: true }
+        observationHeaderCell.font = { name: "Calibri", size: 16, bold: true }
         observationHeaderCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } } // Amarillo
         observationHeaderCell.alignment = { horizontal: "left" }
         observationHeaderCell.border = {
@@ -1026,7 +1016,6 @@ export function ReportGenerator() {
         companiesWithOrders.forEach((company) => {
           const companyAreas =
             getAreasByCompany()[company.id]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-
           if (companyAreas.length === 0) {
             return
           }
@@ -1045,7 +1034,7 @@ export function ReportGenerator() {
 
           const observationCell = worksheet.getCell(currentRow, colIndex)
           observationCell.value = observationText
-          observationCell.font = { name: "Calibri", size: 11 }
+          observationCell.font = { name: "Calibri", size: 16 }
           observationCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF99" } } // Amarillo claro
           observationCell.alignment = { horizontal: "left", wrapText: true }
           observationCell.border = {
@@ -1054,7 +1043,6 @@ export function ReportGenerator() {
             bottom: { style: "thin" },
             right: { style: "thin" },
           }
-
           colIndex++
         })
       }
@@ -1098,7 +1086,6 @@ export function ReportGenerator() {
     if (products.length > 0) {
       // Agrupar productos por categoría
       const productsByCategory: { [categoryId: number]: Product[] } = {}
-
       products.forEach((product) => {
         const categoryId = product.categoryId || 0
         if (!productsByCategory[categoryId]) {
@@ -1200,7 +1187,6 @@ export function ReportGenerator() {
   // NUEVA FUNCIÓN: Obtener cantidad de producto por empresa (combinando todas las áreas) con colores
   const getProductQuantityByCompany = (productId: number, companyId: number) => {
     const companyAreas = getAreasByCompany()[companyId]?.filter((area: Area) => areasWithOrders.includes(area.id)) || []
-
     if (companyAreas.length === 0) {
       return ""
     }
@@ -1741,11 +1727,13 @@ export function ReportGenerator() {
     if (dateValue) {
       const [year, month, day] = dateValue.split("-").map(Number)
       const newDate = new Date(year, month - 1, day)
+
       if (type === "from") {
         setDateRange((prev) => ({ ...prev, from: newDate }))
       } else {
         setDateRange((prev) => ({ ...prev, to: newDate }))
       }
+
       setShowReport(false)
       setHasData(false)
       console.log(`Fecha ${type} seleccionada manualmente:`, format(newDate, "yyyy-MM-dd"))
@@ -1774,6 +1762,7 @@ export function ReportGenerator() {
             Selecciona el período para generar el reporte de productos por empresas.
           </DialogDescription>
         </DialogHeader>
+
         <div className="space-y-4 py-4 flex-1 overflow-hidden flex flex-col">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
@@ -1885,7 +1874,9 @@ export function ReportGenerator() {
                   </Button>
                 </div>
               </div>
+
               <div className="flex-1 overflow-auto">{renderCategoryTables()}</div>
+
               <div className="text-sm text-muted-foreground">
                 <div className="mb-2">Reporte para: {reportDate}</div>
                 <div className="text-xs">
