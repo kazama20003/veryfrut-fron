@@ -1,10 +1,8 @@
 "use client"
-
 import Image from "next/image"
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { ShoppingCart, Star, Tag, Clock, Award, Plus, Minus, X } from "lucide-react"
+import { ShoppingCart, Star, Tag, Clock, Award, Plus, Minus, X, Package, Layers } from "lucide-react"
 import { toast } from "sonner"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -12,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
+// Interfaces
 interface UnitMeasurement {
   id: number
   name: string
@@ -25,7 +24,6 @@ interface ProductUnit {
   unitMeasurement: UnitMeasurement
 }
 
-// Interfaz base del producto (sin propiedades del carrito)
 interface BaseProduct {
   id: number
   name: string
@@ -40,11 +38,26 @@ interface BaseProduct {
   rating?: number
 }
 
-// Interfaz extendida para productos en el carrito
 interface CartProduct extends BaseProduct {
   quantity: number
   selectedUnitId: number
   cartItemId?: string
+}
+
+// Nueva interfaz para información detallada del carrito
+interface CartItemInfo {
+  cartItemId: string
+  quantity: number
+  unitId: number
+  unitName: string
+}
+
+interface DetailedCartInfo {
+  isInCart: boolean
+  totalQuantity: number
+  cartItems: CartItemInfo[]
+  hasMultipleUnits: boolean
+  hasMultipleItems: boolean
 }
 
 interface ProductCardProps {
@@ -54,13 +67,13 @@ interface ProductCardProps {
   disabled?: boolean
   loading?: boolean
   className?: string
-  // Funciones del carrito que reciben BaseProduct
+  cartInfo: DetailedCartInfo
   onAddToCart?: (product: CartProduct, selectedUnitId: number) => void
   onAddToCartAsDuplicate?: (product: CartProduct, selectedUnitId: number) => void
   onUpdateCartItemQuantity?: (productId: number, selectedUnitId: number, quantity: number, cartItemId?: string) => void
 }
 
-// Constantes para mejor mantenimiento - Actualizado a 2 decimales
+// Constants
 const QUANTITY_LIMITS = {
   MIN: 0.01,
   MAX: 999.99,
@@ -70,7 +83,7 @@ const QUANTITY_LIMITS = {
 
 const QUANTITY_PRESETS = [0.01, 0.1, 0.5, 1, 5, 10] as const
 
-// Componente para mostrar estrellas de valoración
+// Star Rating Component
 const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) => {
   const safeRating = Math.min(5, Math.max(0, rating))
   const sizeClasses = size === "md" ? "h-4 w-4 mr-1" : "h-3 w-3 mr-0.5"
@@ -91,7 +104,7 @@ const StarRating = ({ rating, size = "sm" }: { rating: number; size?: "sm" | "md
   )
 }
 
-// Hook personalizado para manejo de cantidad - Actualizado a 2 decimales
+// Quantity Manager Hook
 const useQuantityManager = (initialQuantity = 1) => {
   const [quantity, setQuantity] = useState<number>(initialQuantity)
   const [quantityInput, setQuantityInput] = useState<string>(initialQuantity.toString())
@@ -119,10 +132,8 @@ const useQuantityManager = (initialQuantity = 1) => {
   const handleInputChange = useCallback((value: string) => {
     const normalizedValue = value.replace(",", ".")
     const regex = /^\d*\.?\d{0,2}$/
-
     if (regex.test(normalizedValue) || value === "") {
       setQuantityInput(value)
-
       if (value !== "") {
         const numValue = Number.parseFloat(normalizedValue)
         if (!isNaN(numValue) && numValue > 0) {
@@ -136,7 +147,6 @@ const useQuantityManager = (initialQuantity = 1) => {
   const handleInputBlur = useCallback(() => {
     const normalizedValue = quantityInput.replace(",", ".")
     const numValue = Number.parseFloat(normalizedValue)
-
     if (!isNaN(numValue) && numValue > 0) {
       updateQuantity(numValue)
     } else {
@@ -166,23 +176,24 @@ const useQuantityManager = (initialQuantity = 1) => {
   }
 }
 
-// Hook para detección de dispositivo móvil
+// Mobile detection hook
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const checkIfMobile = () => setIsMobile(window.innerWidth < 640)
-
     checkIfMobile()
-    window.addEventListener("resize", checkIfMobile)
-
-    return () => window.removeEventListener("resize", checkIfMobile)
+    const handleResize = () => checkIfMobile()
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  return isMobile
+  return { isMobile: mounted ? isMobile : false, mounted }
 }
 
-// Componente del modal de cantidad para móvil
+// Mobile Quantity Modal
 const MobileQuantityModal = ({
   isOpen,
   onClose,
@@ -232,23 +243,20 @@ const MobileQuantityModal = ({
             <X className="h-4 w-4" />
           </Button>
         </div>
-
         <p className="text-sm text-muted-foreground mb-6 text-center line-clamp-2">
           {product.name} • {unitName}
         </p>
-
         <div className="flex items-center justify-center mb-6">
           <Button
             variant="outline"
             size="icon"
-            className="h-12 w-12 rounded-full"
+            className="h-12 w-12 rounded-full bg-transparent"
             onClick={onDecrement}
             disabled={disabled || quantity <= QUANTITY_LIMITS.MIN}
             aria-label="Disminuir cantidad"
           >
             <Minus className="h-5 w-5" />
           </Button>
-
           <div className="mx-4 w-28">
             <Input
               type="text"
@@ -262,11 +270,10 @@ const MobileQuantityModal = ({
               aria-label="Cantidad"
             />
           </div>
-
           <Button
             variant="outline"
             size="icon"
-            className="h-12 w-12 rounded-full"
+            className="h-12 w-12 rounded-full bg-transparent"
             onClick={onIncrement}
             disabled={disabled}
             aria-label="Aumentar cantidad"
@@ -274,14 +281,13 @@ const MobileQuantityModal = ({
             <Plus className="h-5 w-5" />
           </Button>
         </div>
-
         <div className="grid grid-cols-3 gap-2 mb-6">
           {QUANTITY_PRESETS.map((preset) => (
             <Button
               key={preset}
               variant="outline"
               size="sm"
-              className="text-sm font-medium"
+              className="text-sm font-medium bg-transparent"
               onClick={() => onQuantityChange(preset)}
               disabled={disabled}
             >
@@ -289,9 +295,8 @@ const MobileQuantityModal = ({
             </Button>
           ))}
         </div>
-
         <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onClose}>
+          <Button variant="outline" className="flex-1 bg-transparent" onClick={onClose}>
             Cancelar
           </Button>
           <Button
@@ -309,6 +314,57 @@ const MobileQuantityModal = ({
   )
 }
 
+// Componente para mostrar información detallada del carrito
+const CartInfoDisplay = ({
+  cartInfo,
+  formatQuantity,
+}: { cartInfo: DetailedCartInfo; formatQuantity: (qty: number) => string }) => {
+  if (!cartInfo.isInCart) return null
+
+  return (
+    <div className="space-y-2">
+      {/* Indicador principal */}
+      <div className="flex items-center justify-center gap-2 p-2.5 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-center justify-center w-5 h-5 bg-green-600 rounded-full flex-shrink-0">
+          <ShoppingCart className="h-3 w-3 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-medium text-green-800 block truncate">✓ En tu carrito</span>
+          <span className="text-xs text-green-700 block truncate">
+            Total: {formatQuantity(cartInfo.totalQuantity)}
+            {cartInfo.hasMultipleItems && ` (${cartInfo.cartItems.length} elementos)`}
+          </span>
+        </div>
+      </div>
+
+      {/* Detalles de elementos en el carrito */}
+      {(cartInfo.hasMultipleUnits || cartInfo.hasMultipleItems) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
+          <div className="flex items-center gap-1 mb-2">
+            <Layers className="h-3 w-3 text-blue-600" />
+            <span className="text-xs font-medium text-blue-800">
+              {cartInfo.hasMultipleUnits ? "Diferentes unidades" : "Elementos separados"}
+            </span>
+          </div>
+          <div className="space-y-1 max-h-20 overflow-y-auto">
+            {cartInfo.cartItems.map((item, index) => (
+              <div key={item.cartItemId} className="flex items-center justify-between text-xs">
+                <span className="text-blue-700 truncate">
+                  #{index + 1} • {item.unitName}
+                </span>
+                <Badge variant="outline" className="text-xs h-5 bg-white border-blue-300 text-blue-700">
+                  {formatQuantity(item.quantity)}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Main ProductCard Component
 export function ProductCard({
   product,
   isNew = false,
@@ -316,6 +372,7 @@ export function ProductCard({
   disabled = false,
   loading = false,
   className,
+  cartInfo,
   onAddToCart,
   onAddToCartAsDuplicate,
   onUpdateCartItemQuantity,
@@ -325,8 +382,8 @@ export function ProductCard({
   )
   const [isHovered, setIsHovered] = useState(false)
   const [isEditingQuantity, setIsEditingQuantity] = useState(false)
+  const { isMobile, mounted } = useIsMobile()
 
-  const isMobile = useIsMobile()
   const {
     quantity,
     quantityInput,
@@ -338,21 +395,19 @@ export function ProductCard({
     decrement,
   } = useQuantityManager(1)
 
-  // Memoizar valores calculados
+  // Memoized values
   const productRating = useMemo(() => product.rating || 5.0, [product.rating])
-
   const selectedUnitName = useMemo(() => {
     const selectedUnit = product.productUnits.find((pu) => pu.unitMeasurement.id === selectedUnitId)
     return selectedUnit?.unitMeasurement.name || "Unidad"
   }, [product.productUnits, selectedUnitId])
-
   const isOutOfStock = useMemo(() => product.stock <= 0, [product.stock])
   const isAddToCartDisabled = useMemo(
     () => disabled || loading || product.productUnits.length === 0 || quantity <= 0 || isOutOfStock,
     [disabled, loading, product.productUnits.length, quantity, isOutOfStock],
   )
 
-  // Determinar si un producto es nuevo (menos de 7 días)
+  // Helper functions
   const isNewProduct = useCallback((createdAt: string) => {
     const productDate = new Date(createdAt)
     const now = new Date()
@@ -361,12 +416,10 @@ export function ProductCard({
     return diffDays <= 7
   }, [])
 
-  // Determinar si un producto es destacado
   const isFeaturedProduct = useCallback((id: number) => {
     return id % 5 === 0
   }, [])
 
-  // Función para convertir BaseProduct a CartProduct
   const createCartProduct = useCallback(
     (baseProduct: BaseProduct, selectedUnitId: number, quantity: number): CartProduct => {
       return {
@@ -378,7 +431,7 @@ export function ProductCard({
     [],
   )
 
-  // Callbacks memoizados
+  // Event handlers
   const handleAddToCart = useCallback(
     (product: BaseProduct, selectedUnitId: number, quantity: number, allowDuplicate = false) => {
       if (!onAddToCart || !onAddToCartAsDuplicate) return
@@ -386,13 +439,10 @@ export function ProductCard({
       const cartProduct = createCartProduct(product, selectedUnitId, quantity)
 
       if (allowDuplicate) {
-        // Para duplicados, agregar directamente con la cantidad especificada
         onAddToCartAsDuplicate(cartProduct, selectedUnitId)
       } else {
-        // Para items normales, agregar y luego actualizar cantidad si es necesario
         onAddToCart(cartProduct, selectedUnitId)
         if (quantity !== 1 && onUpdateCartItemQuantity) {
-          // Pequeño delay para asegurar que el item se agregó primero
           setTimeout(() => {
             onUpdateCartItemQuantity(product.id, selectedUnitId, quantity)
           }, 50)
@@ -419,19 +469,34 @@ export function ProductCard({
     setIsEditingQuantity(false)
   }, [])
 
-  // Usar isNew y isFeatured props si se proporcionan, de lo contrario calcularlos
+  // Determine if product should show badges
   const showAsNew = isNew || isNewProduct(product.createdAt)
   const showAsFeatured = isFeatured || isFeaturedProduct(product.id)
+
+  // Don't render until mounted to avoid hydration issues
+  if (!mounted) {
+    return (
+      <Card className="overflow-hidden border border-border/40 flex flex-col bg-white min-h-[420px] animate-pulse">
+        <div className="w-full aspect-square bg-gray-200" />
+        <CardContent className="p-3 flex-1">
+          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+          <div className="h-3 bg-gray-200 rounded w-full mb-2" />
+          <div className="h-3 bg-gray-200 rounded w-2/3" />
+        </CardContent>
+        <CardFooter className="p-3 pt-0">
+          <div className="h-10 bg-gray-200 rounded w-full" />
+        </CardFooter>
+      </Card>
+    )
+  }
 
   return (
     <>
       <Card
         className={cn(
-          // Estructura base optimizada para móvil
           "overflow-hidden border border-border/40 transition-all duration-200 flex flex-col bg-white",
-          // Altura automática que se adapta al contenido
-          "min-h-[380px]",
-          // Efectos hover solo en desktop
+          // Altura mínima ajustada para acomodar mejor el contenido
+          "min-h-[420px] sm:min-h-[450px]",
           !isMobile && isHovered && !disabled ? "shadow-lg border-border/80" : "shadow-sm",
           disabled && "opacity-60 cursor-not-allowed",
           loading && "animate-pulse",
@@ -440,7 +505,7 @@ export function ProductCard({
         onMouseEnter={() => !disabled && !isMobile && setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Imagen del producto - Proporción fija */}
+        {/* Product Image */}
         <div className="relative w-full aspect-square bg-gray-50">
           <Image
             src={product.imageUrl || "/placeholder.svg?height=300&width=300"}
@@ -453,14 +518,12 @@ export function ProductCard({
             height={300}
             loading="lazy"
           />
-
           {loading && (
             <div className="absolute inset-0 bg-muted/50 flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           )}
-
-          {/* Badges superiores */}
+          {/* Top badges */}
           <div className="absolute top-2 left-2 flex flex-col gap-1">
             {showAsNew && (
               <Badge className="bg-blue-600 text-white font-medium text-xs px-2 py-1 flex items-center shadow-sm">
@@ -472,7 +535,6 @@ export function ProductCard({
               <Badge className="bg-red-600 text-white font-medium text-xs px-2 py-1 shadow-sm">SIN STOCK</Badge>
             )}
           </div>
-
           {showAsFeatured && (
             <Badge className="absolute right-2 top-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium text-xs px-2 py-1 flex items-center shadow-sm">
               <Award className="h-3 w-3 mr-1" />
@@ -481,9 +543,9 @@ export function ProductCard({
           )}
         </div>
 
-        {/* Contenido de la tarjeta */}
+        {/* Card Content */}
         <CardContent className="p-3 flex-1 flex flex-col">
-          {/* Título del producto */}
+          {/* Product title */}
           <div className="mb-2">
             <h3 className="font-semibold text-sm leading-tight line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
           </div>
@@ -494,10 +556,10 @@ export function ProductCard({
             <span className="text-xs text-green-600 font-medium">{productRating.toFixed(1)} • Excelente</span>
           </div>
 
-          {/* Descripción */}
+          {/* Description */}
           <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">{product.description}</p>
 
-          {/* Badge de selección especial */}
+          {/* Featured badge */}
           {showAsFeatured && (
             <div className="mb-3">
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 border border-amber-200">
@@ -506,16 +568,22 @@ export function ProductCard({
             </div>
           )}
 
-          {/* Sección de cantidad y presentación - Simplificada para móvil */}
+          {/* Información del carrito - NUEVA SECCIÓN */}
+          {cartInfo.isInCart && (
+            <div className="mb-3">
+              <CartInfoDisplay cartInfo={cartInfo} formatQuantity={formatQuantity} />
+            </div>
+          )}
+
+          {/* Quantity and unit selection */}
           <div className="mt-auto">
             <div className="bg-gray-50 rounded-lg p-3 border">
               <div className="text-xs text-muted-foreground mb-2 flex items-center font-medium">
                 <Tag className="h-3 w-3 mr-1" />
                 <span>Cantidad y Presentación</span>
               </div>
-
-              {/* Cantidad - Layout vertical en móvil */}
               <div className="space-y-2">
+                {/* Quantity */}
                 <div>
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-1">
                     Cantidad
@@ -548,11 +616,9 @@ export function ProductCard({
                         >
                           <Minus className="h-2.5 w-2.5" />
                         </Button>
-
                         <span className="text-sm font-semibold min-w-[1.5rem] text-center">
                           {formatQuantity(quantity)}
                         </span>
-
                         <Button
                           variant="ghost"
                           size="icon"
@@ -581,7 +647,6 @@ export function ProductCard({
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-
                       <Input
                         type="text"
                         value={quantityInput}
@@ -597,7 +662,6 @@ export function ProductCard({
                         inputMode="decimal"
                         aria-label="Cantidad"
                       />
-
                       <Button
                         variant="ghost"
                         size="icon"
@@ -611,8 +675,7 @@ export function ProductCard({
                     </div>
                   )}
                 </div>
-
-                {/* Presentación */}
+                {/* Unit selection */}
                 <div>
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-1">
                     Presentación
@@ -635,8 +698,7 @@ export function ProductCard({
                   </Select>
                 </div>
               </div>
-
-              {/* Resumen de selección */}
+              {/* Selection summary */}
               <div className="mt-2 text-center">
                 <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
                   {formatQuantity(quantity)} {selectedUnitName}
@@ -646,40 +708,71 @@ export function ProductCard({
           </div>
         </CardContent>
 
-        {/* Footer con botón de agregar al carrito */}
-        <CardFooter className="p-3 pt-0">
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className={cn(
-                "flex-1 font-semibold transition-all duration-200 shadow-sm hover:shadow-md text-xs h-10",
-                isOutOfStock
-                  ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white",
-              )}
-              onClick={() => handleAddToCart(product, selectedUnitId, quantity, false)}
-              disabled={isAddToCartDisabled}
-            >
-              <ShoppingCart className="mr-1 h-3 w-3" />
-              <span className="truncate">{isOutOfStock ? "Sin stock" : "Agregar"}</span>
-            </Button>
-
-            {!isOutOfStock && (
+        {/* Footer con botones mejorados y responsivos */}
+        <CardFooter className="p-3 pt-0 mt-auto">
+          {cartInfo.isInCart ? (
+            /* Producto YA está en el carrito - Mostrar estado y opciones */
+            <div className="w-full space-y-3">
+              {/* Botones de acción cuando está en carrito */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-11 border-green-600 text-green-700 hover:bg-green-50 bg-transparent text-xs font-medium"
+                  onClick={() => handleAddToCart(product, selectedUnitId, quantity, false)}
+                  disabled={isAddToCartDisabled}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">Agregar más</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-11 border-blue-600 text-blue-700 hover:bg-blue-50 bg-transparent text-xs font-medium"
+                  onClick={() => handleAddToCart(product, selectedUnitId, quantity, true)}
+                  disabled={isAddToCartDisabled}
+                  title="Agregar como elemento separado en el carrito"
+                >
+                  <Package className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">Separado</span>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* Producto NO está en el carrito - Botón principal */
+            <div className="w-full">
               <Button
                 size="sm"
-                variant="outline"
-                className="h-10 px-2 border-green-600 text-green-600 hover:bg-green-50"
-                onClick={() => handleAddToCart(product, selectedUnitId, quantity, true)}
+                className={cn(
+                  "w-full font-semibold transition-all duration-200 shadow-sm hover:shadow-md h-11",
+                  "text-xs sm:text-sm",
+                  isOutOfStock
+                    ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white",
+                )}
+                onClick={() => handleAddToCart(product, selectedUnitId, quantity, false)}
                 disabled={isAddToCartDisabled}
-                title="Agregar como elemento separado"
               >
-                <Plus className="h-3 w-3" />
+                <ShoppingCart className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="truncate">
+                  {isOutOfStock ? (
+                    "Sin stock"
+                  ) : (
+                    <span className="flex flex-col items-center leading-tight">
+                      <span>Agregar al carrito</span>
+                      <span className="text-xs opacity-90">
+                        {formatQuantity(quantity)} {selectedUnitName}
+                      </span>
+                    </span>
+                  )}
+                </span>
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </CardFooter>
       </Card>
 
+      {/* Mobile quantity modal */}
       <MobileQuantityModal
         isOpen={isEditingQuantity}
         onClose={closeMobileEditor}

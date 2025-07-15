@@ -1,9 +1,12 @@
 "use client"
+
 import type React from "react"
+
 import Image from "next/image"
 import { useEffect, useState, useCallback } from "react"
 import { Building, InfoIcon, Loader2, Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
+
 import { api } from "@/lib/axiosInstance"
 import { getUserIdFromCookies } from "@/lib/cookies"
 import { Button } from "@/components/ui/button"
@@ -137,18 +140,23 @@ export function ShoppingCartDrawer({
     try {
       setIsLoadingUserData(true)
       setError(null)
+
       // Obtener el ID del usuario desde las cookies
       const userId = getUserIdFromCookies()
+
       if (!userId) {
         setError("No se pudo identificar al usuario. Por favor, inicia sesión nuevamente.")
         return
       }
+
       // Obtener los datos del usuario
       const response = await api.get(`/users/${userId}`)
       setUserData(response.data)
+
       // Si el usuario tiene áreas, seleccionar la primera por defecto
       if (response.data.areas && response.data.areas.length > 0) {
         setSelectedAreaId(response.data.areas[0].id.toString())
+
         // Verificar todas las órdenes del día actual
         fetchTodayOrders()
       }
@@ -166,6 +174,7 @@ export function ShoppingCartDrawer({
       // Solo bloquear durante la operación de envío
       onPageBlock(isSubmitting)
     }
+
     // Limpiar al desmontar
     return () => {
       if (onPageBlock) {
@@ -189,27 +198,34 @@ export function ShoppingCartDrawer({
   const fetchTodayOrders = async () => {
     try {
       setIsCheckingAreaOrders(true)
+
       // Obtener la fecha actual
       const today = new Date()
+
       // Crear startDate (inicio del día) y endDate (fin del día)
       const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0).toISOString()
       const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
 
       // Consultar todas las órdenes para el día actual sin filtrar por área
       const response = await api.get(`/orders/filter?startDate=${startDate}&endDate=${endDate}`)
+
       console.log("Órdenes del día:", response.data)
 
       // Si hay órdenes, determinar qué áreas ya tienen pedidos
       if (Array.isArray(response.data) && response.data.length > 0) {
         const orders = response.data as Order[]
+
         // Crear un objeto con el estado de cada área
         const newAreaOrderStatus: Record<string, boolean> = {}
+
         // Marcar las áreas que ya tienen pedidos
         orders.forEach((order) => {
           newAreaOrderStatus[order.areaId.toString()] = true
         })
+
         // Actualizar el estado
         setAreaOrderStatus(newAreaOrderStatus)
+
         console.log("Áreas con pedidos:", newAreaOrderStatus)
       } else {
         // No hay órdenes hoy, todas las áreas están disponibles
@@ -228,22 +244,22 @@ export function ShoppingCartDrawer({
   // Función para verificar si un área específica tiene pedido (solo se usa cuando es necesario confirmar)
   const checkSpecificAreaOrder = async (areaId: string) => {
     try {
-      // Obtener la fecha actual en formato YYYY-MM-DD
+      // Obtener la fecha actual
       const today = new Date()
-      const year = today.getFullYear()
-      const month = String(today.getMonth() + 1).padStart(2, "0")
-      const day = String(today.getDate()).padStart(2, "0")
-      const dateStr = `${year}-${month}-${day}`
+      const dateStr = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0).toISOString()
 
       // Consultar si existe una orden para esta área y fecha
       const response = await api.get(`/orders/check?areaId=${areaId}&date=${dateStr}`)
+
       // La respuesta debería indicar si existe o no un pedido
       const hasOrder = response.data.exists || false
+
       // Actualizar el estado solo para esta área específica
       setAreaOrderStatus((prev) => ({
         ...prev,
         [areaId]: hasOrder,
       }))
+
       return hasOrder
     } catch (error) {
       console.error(`Error al verificar pedido específico para área ${areaId}:`, error)
@@ -257,6 +273,7 @@ export function ShoppingCartDrawer({
     if (!product.productUnits || !Array.isArray(product.productUnits)) {
       return "Unidad"
     }
+
     const selectedUnit = product.productUnits.find((pu) => pu.unitMeasurement.id === product.selectedUnitId)
     return selectedUnit?.unitMeasurement.name || "Unidad"
   }
@@ -275,6 +292,7 @@ export function ShoppingCartDrawer({
   const handleQuantityChange = (productId: number, selectedUnitId: number, value: string, cartItemId?: string) => {
     const normalizedValue = value.replace(",", ".")
     const regex = /^\d*\.?\d{0,3}$/
+
     if (regex.test(normalizedValue) || value === "") {
       setEditingQuantity({
         productId,
@@ -295,6 +313,7 @@ export function ShoppingCartDrawer({
     ) {
       const normalizedValue = editingQuantity.value.replace(",", ".")
       const numValue = Number.parseFloat(normalizedValue)
+
       if (!isNaN(numValue) && numValue > 0) {
         const roundedValue = Math.round(numValue * 1000) / 1000
         onUpdateQuantity(productId, selectedUnitId, roundedValue, cartItemId)
@@ -348,6 +367,7 @@ export function ShoppingCartDrawer({
     // Verificar nuevamente si ya existe una orden para esta área específica hoy
     // Esto es una doble verificación para asegurarnos de tener la información más actualizada
     const hasOrder = await checkSpecificAreaOrder(selectedAreaId)
+
     if (hasOrder) {
       toast.error("Orden ya existente", {
         description: "Ya existe una orden para esta área hoy. Solo se permite una orden por área por día.",
@@ -362,8 +382,10 @@ export function ShoppingCartDrawer({
   const handleSubmitOrder = async () => {
     try {
       setIsSubmitting(true)
+
       // Obtener el ID del usuario
       const userId = getUserIdFromCookies()
+
       if (!userId) {
         toast.error("Error de autenticación", {
           description: "No se pudo identificar al usuario. Por favor, inicia sesión nuevamente.",
@@ -406,6 +428,7 @@ export function ShoppingCartDrawer({
 
         // Mostrar mensaje de confirmación
         setIsOrderComplete(true)
+
         setObservation("")
 
         // Cerrar el drawer después de un breve retraso SOLO después del éxito
@@ -420,6 +443,7 @@ export function ShoppingCartDrawer({
       } else {
         // Verificar una última vez si ya existe una orden para esta área
         const hasOrder = await checkSpecificAreaOrder(selectedAreaId)
+
         if (hasOrder) {
           toast.error("Orden ya existente", {
             description: "Ya existe una orden para esta área hoy. Solo se permite una orden por área por día.",
@@ -466,6 +490,7 @@ export function ShoppingCartDrawer({
 
         // Mostrar mensaje de confirmación
         setIsOrderComplete(true)
+
         setObservation("")
 
         // Cerrar el drawer después de un breve retraso SOLO después del éxito
@@ -483,14 +508,19 @@ export function ShoppingCartDrawer({
       onClearCart()
     } catch (error: unknown) {
       console.error("Error al procesar el pedido:", error)
+
       // Manejar el error de forma segura con TypeScript
       let errorMessage = "Ha ocurrido un error. Por favor, inténtalo de nuevo."
+
       if (error && typeof error === "object") {
         const errorObj = error as Record<string, unknown>
+
         if ("response" in errorObj && errorObj.response && typeof errorObj.response === "object") {
           const responseObj = errorObj.response as Record<string, unknown>
+
           if ("data" in responseObj && responseObj.data && typeof responseObj.data === "object") {
             const dataObj = responseObj.data as Record<string, unknown>
+
             if ("message" in dataObj && typeof dataObj.message === "string") {
               errorMessage = dataObj.message
             }
@@ -525,6 +555,7 @@ export function ShoppingCartDrawer({
       if (onPageBlock) {
         onPageBlock(false)
       }
+
       // Cerrar el drawer
       onClose()
       setObservation("")
@@ -554,6 +585,7 @@ export function ShoppingCartDrawer({
                   : `${cart.length} ${cart.length === 1 ? "producto" : "productos"} en tu carrito`}
               </DrawerDescription>
             </div>
+
             {/* Botón de cerrar mejorado para móvil */}
             <div className="flex items-center gap-2 ml-4">
               <DrawerClose asChild>
@@ -672,6 +704,7 @@ export function ShoppingCartDrawer({
                                   ))}
                                 </SelectContent>
                               </Select>
+
                               {areaOrderStatus[selectedAreaId] && (
                                 <Alert variant="destructive" className="mt-2">
                                   <AlertTitle className="text-sm">Área con pedido existente</AlertTitle>
@@ -743,13 +776,14 @@ export function ShoppingCartDrawer({
                               </div>
                             </div>
                           </div>
+
                           {/* Controles de cantidad con mejor espaciado - MEJORADOS para 0.001 */}
                           <div className="mt-3 flex items-center justify-center">
                             <div className="flex items-center gap-2">
                               <Button
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 rounded-full bg-transparent"
+                                className="h-8 w-8 rounded-full"
                                 onClick={() =>
                                   onUpdateQuantity(
                                     item.id,
@@ -763,6 +797,7 @@ export function ShoppingCartDrawer({
                                 <Minus className="h-3 w-3" />
                                 <span className="sr-only">Disminuir</span>
                               </Button>
+
                               {/* Input editable para cantidad con decimales */}
                               <div className="mx-1 w-20 text-center">
                                 {editingQuantity &&
@@ -805,10 +840,11 @@ export function ShoppingCartDrawer({
                                   </button>
                                 )}
                               </div>
+
                               <Button
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 rounded-full bg-transparent"
+                                className="h-8 w-8 rounded-full"
                                 onClick={() =>
                                   onUpdateQuantity(item.id, item.selectedUnitId, item.quantity + 0.001, item.cartItemId)
                                 }
@@ -845,12 +881,7 @@ export function ShoppingCartDrawer({
                   {cart.length > 0 && (
                     <>
                       <div className="grid grid-cols-2 gap-3">
-                        <Button
-                          variant="outline"
-                          onClick={onClearCart}
-                          disabled={isSubmitting}
-                          className="h-11 bg-transparent"
-                        >
+                        <Button variant="outline" onClick={onClearCart} disabled={isSubmitting} className="h-11">
                           Vaciar Carrito
                         </Button>
                         <Button
@@ -962,6 +993,7 @@ export function ShoppingCartDrawer({
                       Pedido ({cart.length} {cart.length === 1 ? "producto" : "productos"})
                     </h4>
                   </div>
+
                   <div className="p-3 max-h-32 overflow-y-auto">
                     <ul className="space-y-2">
                       {cart.map((item, index) => (

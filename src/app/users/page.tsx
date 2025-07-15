@@ -1,8 +1,6 @@
 "use client"
-
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { ShoppingCart, Search, X, AlertTriangle, SlidersHorizontal } from "lucide-react"
-
 import { api } from "@/lib/axiosInstance"
 import { ProductCard } from "@/components/users/product-card"
 import { ShoppingCartDrawer } from "@/components/users/shopping-cart-drawer"
@@ -17,7 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
-// Interfaces para los tipos de datos
+// Interfaces
 interface UnitMeasurement {
   id: number
   name: string
@@ -51,38 +49,47 @@ interface Category {
   description: string
 }
 
-type SortOption = "name" | "price" | "newest" | "rating"
-
-// Hook para detección de dispositivo móvil optimizado
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false)
-  const [isClient, setIsClient] = useState(false)
-
-  useEffect(() => {
-    setIsClient(true)
-    const checkIfMobile = () => setIsMobile(window.innerWidth < 768)
-
-    checkIfMobile()
-    window.addEventListener("resize", checkIfMobile)
-
-    return () => window.removeEventListener("resize", checkIfMobile)
-  }, [])
-
-  return { isMobile, isClient }
+// Nueva interfaz para información detallada del carrito
+interface CartItemInfo {
+  cartItemId: string
+  quantity: number
+  unitId: number
+  unitName: string
 }
 
-// Componente de skeleton para productos - Mejorado
+interface DetailedCartInfo {
+  isInCart: boolean
+  totalQuantity: number
+  cartItems: CartItemInfo[]
+  hasMultipleUnits: boolean
+  hasMultipleItems: boolean
+}
+
+type SortOption = "name" | "price" | "newest" | "rating"
+
+// Custom hook for mobile detection with proper hydration handling
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    const checkIfMobile = () => setIsMobile(window.innerWidth < 768)
+    checkIfMobile()
+    const handleResize = () => checkIfMobile()
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
+  return { isMobile: mounted ? isMobile : false, mounted }
+}
+
+// Improved Product Skeleton
 const ProductSkeleton = () => (
-  <div className="flex flex-col animate-pulse bg-white rounded-lg border border-border/40 overflow-hidden min-h-[380px]">
-    {/* Imagen skeleton */}
+  <div className="flex flex-col animate-pulse bg-white rounded-lg border border-border/40 overflow-hidden min-h-[420px] sm:min-h-[450px]">
     <div className="w-full aspect-square bg-gray-200" />
-
-    {/* Contenido skeleton */}
     <div className="p-3 flex-1 flex flex-col">
-      {/* Título */}
       <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-
-      {/* Rating */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex gap-1">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -91,14 +98,10 @@ const ProductSkeleton = () => (
         </div>
         <div className="h-3 bg-gray-200 rounded w-16" />
       </div>
-
-      {/* Descripción */}
       <div className="space-y-1 mb-3">
         <div className="h-3 bg-gray-200 rounded w-full" />
         <div className="h-3 bg-gray-200 rounded w-2/3" />
       </div>
-
-      {/* Sección de cantidad */}
       <div className="mt-auto">
         <div className="bg-gray-100 rounded-lg p-3">
           <div className="h-3 bg-gray-200 rounded w-1/2 mb-2" />
@@ -110,15 +113,13 @@ const ProductSkeleton = () => (
         </div>
       </div>
     </div>
-
-    {/* Botón skeleton */}
     <div className="p-3 pt-0">
-      <div className="h-10 bg-gray-200 rounded w-full" />
+      <div className="h-11 bg-gray-200 rounded w-full" />
     </div>
   </div>
 )
 
-// Componente de filtros móviles mejorado
+// Mobile Filters Sheet Component
 const MobileFiltersSheet = ({
   isOpen,
   onOpenChange,
@@ -128,6 +129,7 @@ const MobileFiltersSheet = ({
   sortBy,
   onSortChange,
   disabled,
+  totalProducts,
 }: {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
@@ -137,15 +139,15 @@ const MobileFiltersSheet = ({
   sortBy: SortOption
   onSortChange: (sort: SortOption) => void
   disabled: boolean
+  totalProducts: number
 }) => (
   <Sheet open={isOpen} onOpenChange={onOpenChange}>
     <SheetContent side="left" className="w-[90%] sm:w-[400px] p-0">
       <SheetHeader className="p-6 pb-4">
         <SheetTitle className="text-left">Filtros y Ordenamiento</SheetTitle>
       </SheetHeader>
-
       <div className="px-6 pb-6 space-y-6">
-        {/* Categorías mejoradas en móvil */}
+        {/* Categories */}
         <div>
           <h3 className="font-semibold mb-4 text-base text-gray-900 flex items-center">
             <SlidersHorizontal className="h-4 w-4 mr-2 text-green-600" />
@@ -171,8 +173,7 @@ const MobileFiltersSheet = ({
                 variant={activeFilter === null ? "secondary" : "outline"}
                 className={cn("ml-2", activeFilter === null ? "bg-green-100 text-green-800" : "")}
               >
-                {/* You'll need to pass total count here */}
-                Todos
+                {totalProducts}
               </Badge>
             </Button>
             {categories.map((category) => (
@@ -201,10 +202,8 @@ const MobileFiltersSheet = ({
             ))}
           </div>
         </div>
-
         <Separator className="my-6" />
-
-        {/* Ordenamiento mejorado en móvil */}
+        {/* Sorting */}
         <div>
           <h3 className="font-semibold mb-4 text-base text-gray-900 flex items-center">
             <Search className="h-4 w-4 mr-2 text-green-600" />
@@ -233,7 +232,9 @@ const MobileFiltersSheet = ({
                 disabled={disabled}
               >
                 <span className="flex items-center">
-                  <span className="mr-3 text-lg">{option.icon}</span>
+                  <span className="mr-3 text-lg" role="img" aria-label={option.label}>
+                    {option.icon}
+                  </span>
                   {option.label}
                 </span>
                 {sortBy === option.value && (
@@ -251,7 +252,7 @@ const MobileFiltersSheet = ({
 )
 
 export default function ProductsPage() {
-  // Estados para los datos
+  // State management
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
@@ -264,11 +265,10 @@ export default function ProductsPage() {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false)
   const [mobileSearchValue, setMobileSearchValue] = useState("")
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-
   const mobileSearchInputRef = useRef<HTMLInputElement>(null)
-  const { isMobile, isClient } = useIsMobile()
+  const { isMobile, mounted } = useIsMobile()
 
-  // Hook para el carrito
+  // Cart hook
   const {
     cart,
     addToCart,
@@ -280,13 +280,51 @@ export default function ProductsPage() {
     getTotalItems,
   } = useCart()
 
-  // Función para cargar datos
+  // Función mejorada para obtener información detallada del carrito
+  const getDetailedCartInfo = useCallback(
+    (productId: number): DetailedCartInfo => {
+      const cartItems = cart.filter((item) => item.id === productId)
+
+      if (cartItems.length === 0) {
+        return {
+          isInCart: false,
+          totalQuantity: 0,
+          cartItems: [],
+          hasMultipleUnits: false,
+          hasMultipleItems: false,
+        }
+      }
+
+      const cartItemsInfo: CartItemInfo[] = cartItems.map((item) => ({
+        cartItemId: item.cartItemId || `${item.id}-${item.selectedUnitId}`,
+        quantity: item.quantity,
+        unitId: item.selectedUnitId,
+        unitName:
+          item.productUnits?.find((pu) => pu.unitMeasurement.id === item.selectedUnitId)?.unitMeasurement.name ||
+          "Unidad",
+      }))
+
+      const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0)
+      const uniqueUnits = new Set(cartItems.map((item) => item.selectedUnitId))
+      const hasMultipleUnits = uniqueUnits.size > 1
+      const hasMultipleItems = cartItems.length > 1
+
+      return {
+        isInCart: true,
+        totalQuantity,
+        cartItems: cartItemsInfo,
+        hasMultipleUnits,
+        hasMultipleItems,
+      }
+    },
+    [cart],
+  )
+
+  // Data fetching
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true)
-
       const [productsResponse, categoriesResponse] = await Promise.all([api.get("/products"), api.get("/categories")])
-
       setProducts(productsResponse.data)
       setFilteredProducts(productsResponse.data)
       setCategories(categoriesResponse.data)
@@ -300,15 +338,13 @@ export default function ProductsPage() {
     }
   }, [])
 
-  // Cargar datos al montar el componente
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  // Función de ordenamiento
+  // Sorting function
   const sortProducts = useCallback((products: Product[], sortOption: SortOption) => {
     const sorted = [...products]
-
     switch (sortOption) {
       case "name":
         return sorted.sort((a, b) => a.name.localeCompare(b.name))
@@ -323,17 +359,17 @@ export default function ProductsPage() {
     }
   }, [])
 
-  // Aplicar filtros y ordenamiento
+  // Apply filters and sorting
   const applyFiltersAndSort = useCallback(
     (categoryId: number | null, query: string, sort: SortOption) => {
       let filtered = [...products]
 
-      // Filtrar por categoría
+      // Filter by category
       if (categoryId !== null) {
         filtered = filtered.filter((product) => product.categoryId === categoryId)
       }
 
-      // Filtrar por búsqueda
+      // Filter by search
       if (query.trim() !== "") {
         const searchTerms = query.toLowerCase().split(" ")
         filtered = filtered.filter((product) => {
@@ -342,15 +378,14 @@ export default function ProductsPage() {
         })
       }
 
-      // Ordenar
+      // Sort
       filtered = sortProducts(filtered, sort)
-
       setFilteredProducts(filtered)
     },
     [products, sortProducts],
   )
 
-  // Manejar cambio de filtro
+  // Event handlers
   const handleFilterChange = useCallback(
     (categoryId: number | null) => {
       setActiveFilter(categoryId)
@@ -359,7 +394,6 @@ export default function ProductsPage() {
     [applyFiltersAndSort, searchQuery, sortBy],
   )
 
-  // Manejar búsqueda
   const handleSearch = useCallback(
     (query: string) => {
       setSearchQuery(query)
@@ -368,7 +402,6 @@ export default function ProductsPage() {
     [applyFiltersAndSort, activeFilter, sortBy],
   )
 
-  // Manejar ordenamiento
   const handleSortChange = useCallback(
     (sort: SortOption) => {
       setSortBy(sort)
@@ -377,7 +410,7 @@ export default function ProductsPage() {
     [applyFiltersAndSort, activeFilter, searchQuery],
   )
 
-  // Búsqueda móvil
+  // Mobile search handlers
   const handleMobileSearch = useCallback(() => {
     setSearchQuery(mobileSearchValue)
     applyFiltersAndSort(activeFilter, mobileSearchValue, sortBy)
@@ -390,20 +423,7 @@ export default function ProductsPage() {
     mobileSearchInputRef.current?.focus()
   }, [activeFilter, sortBy, applyFiltersAndSort])
 
-  // Remove these functions:
-  // const isNewProduct = useCallback((createdAt: string) => {
-  //   const productDate = new Date(createdAt)
-  //   const now = new Date()
-  //   const diffTime = Math.abs(now.getTime() - productDate.getTime())
-  //   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  //   return diffDays <= 7
-  // }, [])
-
-  // const isFeaturedProduct = useCallback((id: number) => {
-  //   return id % 5 === 0
-  // }, [])
-
-  // Funciones del carrito
+  // Cart handlers
   const handleOpenCart = useCallback(() => {
     if (!isPageBlocked) setIsCartOpen(true)
   }, [isPageBlocked])
@@ -425,10 +445,9 @@ export default function ProductsPage() {
     })
   }, [])
 
-  // Temporizador de seguridad
+  // Safety timer for page blocking
   useEffect(() => {
     if (!isPageBlocked) return
-
     const safetyTimer = setTimeout(() => {
       setIsPageBlocked(false)
       setIsCartOpen(false)
@@ -436,11 +455,10 @@ export default function ProductsPage() {
         description: "La página ha sido desbloqueada automáticamente.",
       })
     }, 5000)
-
     return () => clearTimeout(safetyTimer)
   }, [isPageBlocked])
 
-  // Estadísticas memoizadas
+  // Memoized statistics
   const stats = useMemo(
     () => ({
       total: products.length,
@@ -451,13 +469,39 @@ export default function ProductsPage() {
     [products.length, filteredProducts.length, categories.length, getTotalItems],
   )
 
-  // Configuración de grid responsivo optimizado - Estático para evitar hidratación
-  const gridClasses = "grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+  // Grid classes mejorado para mejor responsividad
+  const gridClasses =
+    "grid gap-3 sm:gap-4 grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+
+  // Don't render mobile-specific content until mounted
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col bg-gray-50">
+        <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 shadow-sm">
+          <div className="flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-green-600 to-green-800 bg-clip-text text-transparent">
+              Productos Premium
+            </h1>
+            <Button variant="outline" size="icon" className="h-9 w-9 bg-transparent">
+              <ShoppingCart className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
+        <main className="flex-1 p-4 sm:p-6">
+          <div className={gridClasses}>
+            {Array.from({ length: 12 }).map((_, index) => (
+              <ProductSkeleton key={index} />
+            ))}
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <>
       <div className="flex min-h-screen flex-col bg-gray-50">
-        {/* Header mejorado */}
+        {/* Header */}
         <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 shadow-sm">
           <div className="flex h-14 sm:h-16 items-center justify-between px-4 sm:px-6">
             <div className="flex items-center gap-3">
@@ -470,11 +514,10 @@ export default function ProductsPage() {
                 </Badge>
               )}
             </div>
-
-            {/* Controles del header */}
+            {/* Header controls */}
             <div className="flex items-center gap-2">
-              {/* Búsqueda móvil mejorada */}
-              {isClient && isMobile && (
+              {/* Mobile search */}
+              {isMobile && (
                 <div
                   className={cn("relative transition-all duration-300 ease-in-out", isSearchFocused ? "w-44" : "w-36")}
                 >
@@ -504,13 +547,12 @@ export default function ProductsPage() {
                   )}
                 </div>
               )}
-
-              {/* Filtros móviles */}
-              {isClient && isMobile && (
+              {/* Mobile filters */}
+              {isMobile && (
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-9 w-9 relative"
+                  className="h-9 w-9 relative bg-transparent"
                   onClick={() => setIsMobileFilterOpen(true)}
                   disabled={isPageBlocked}
                 >
@@ -520,12 +562,11 @@ export default function ProductsPage() {
                   )}
                 </Button>
               )}
-
-              {/* Botón de carrito */}
+              {/* Cart button */}
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9 w-9 relative"
+                className="h-9 w-9 relative bg-transparent"
                 onClick={handleOpenCart}
                 disabled={isPageBlocked}
               >
@@ -541,7 +582,7 @@ export default function ProductsPage() {
         </header>
 
         <main className="flex-1 p-4 sm:p-6">
-          {/* Alerta de bloqueo */}
+          {/* Block alert */}
           {isPageBlocked && (
             <Alert className="mb-6 bg-amber-50 border-amber-200 animate-in slide-in-from-top-2 duration-300">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -559,10 +600,10 @@ export default function ProductsPage() {
             </Alert>
           )}
 
-          {/* Controles mejorados para escritorio - Solo renderizar después de hidratación */}
-          {isClient && !isMobile && (
+          {/* Desktop controls */}
+          {!isMobile && (
             <div className="mb-8 space-y-6">
-              {/* Primera fila: Filtros de categorías */}
+              {/* Category filters */}
               <div className="bg-white rounded-xl border border-border/40 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -581,7 +622,6 @@ export default function ProductsPage() {
                     </Button>
                   )}
                 </div>
-
                 {isLoading ? (
                   <div className="flex gap-3 flex-wrap">
                     {Array.from({ length: 6 }).map((_, i) => (
@@ -633,10 +673,10 @@ export default function ProductsPage() {
                 )}
               </div>
 
-              {/* Segunda fila: Búsqueda y ordenamiento */}
+              {/* Search and sorting */}
               <div className="bg-white rounded-xl border border-border/40 p-6 shadow-sm">
                 <div className="flex items-center justify-between">
-                  {/* Sección de búsqueda */}
+                  {/* Search section */}
                   <div className="flex-1 max-w-2xl">
                     <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
                       <Search className="h-4 w-4 mr-2 text-green-600" />
@@ -669,8 +709,7 @@ export default function ProductsPage() {
                       </div>
                     )}
                   </div>
-
-                  {/* Sección de ordenamiento */}
+                  {/* Sorting section */}
                   <div className="ml-8">
                     <h3 className="text-sm font-semibold text-gray-700 mb-3">Ordenar por</h3>
                     <select
@@ -686,8 +725,7 @@ export default function ProductsPage() {
                     </select>
                   </div>
                 </div>
-
-                {/* Estadísticas de resultados */}
+                {/* Results statistics */}
                 {!isLoading && (
                   <div className="mt-4 pt-4 border-t border-gray-100">
                     <div className="flex items-center justify-between text-sm text-gray-600">
@@ -710,7 +748,7 @@ export default function ProductsPage() {
             </div>
           )}
 
-          {/* Resultados de búsqueda */}
+          {/* Search results banner */}
           {!isLoading && searchQuery && (
             <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200/50">
               <div className="flex items-center justify-between">
@@ -725,7 +763,7 @@ export default function ProductsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-green-300 text-green-700 hover:bg-green-100"
+                  className="border-green-300 text-green-700 hover:bg-green-100 bg-transparent"
                   onClick={() => {
                     setSearchQuery("")
                     setMobileSearchValue("")
@@ -740,21 +778,27 @@ export default function ProductsPage() {
             </div>
           )}
 
-          {/* Grid de productos con mejor responsividad */}
+          {/* Products grid */}
           <div className={gridClasses}>
             {isLoading ? (
               Array.from({ length: isMobile ? 6 : 12 }).map((_, index) => <ProductSkeleton key={index} />)
             ) : filteredProducts.length > 0 ? (
-              filteredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  disabled={isPageBlocked}
-                  onAddToCart={addToCart}
-                  onAddToCartAsDuplicate={addToCartAsDuplicate}
-                  onUpdateCartItemQuantity={updateCartItemQuantity}
-                />
-              ))
+              filteredProducts.map((product) => {
+                // Obtener información detallada del carrito para este producto
+                const cartInfo = getDetailedCartInfo(product.id)
+
+                return (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    disabled={isPageBlocked}
+                    cartInfo={cartInfo}
+                    onAddToCart={addToCart}
+                    onAddToCartAsDuplicate={addToCartAsDuplicate}
+                    onUpdateCartItemQuantity={updateCartItemQuantity}
+                  />
+                )
+              })
             ) : (
               <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
                 <div className="mb-6 p-4 rounded-full bg-muted/30">
@@ -785,21 +829,20 @@ export default function ProductsPage() {
         </main>
       </div>
 
-      {/* Filtros móviles - Solo renderizar en cliente */}
-      {isClient && (
-        <MobileFiltersSheet
-          isOpen={isMobileFilterOpen}
-          onOpenChange={setIsMobileFilterOpen}
-          categories={categories}
-          activeFilter={activeFilter}
-          onFilterChange={handleFilterChange}
-          sortBy={sortBy}
-          onSortChange={handleSortChange}
-          disabled={isPageBlocked}
-        />
-      )}
+      {/* Mobile filters sheet */}
+      <MobileFiltersSheet
+        isOpen={isMobileFilterOpen}
+        onOpenChange={setIsMobileFilterOpen}
+        categories={categories}
+        activeFilter={activeFilter}
+        onFilterChange={handleFilterChange}
+        sortBy={sortBy}
+        onSortChange={handleSortChange}
+        disabled={isPageBlocked}
+        totalProducts={stats.total}
+      />
 
-      {/* Carrito de compras */}
+      {/* Shopping cart drawer */}
       <ShoppingCartDrawer
         isOpen={isCartOpen}
         onClose={handleCloseCart}
