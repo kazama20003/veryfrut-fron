@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import React from "react"
@@ -23,7 +22,6 @@ import { AxiosError } from "axios"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import jsPDF from "jspdf"
-
 import { api } from "@/lib/axiosInstance"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -126,12 +124,12 @@ const generateCartItemId = () => {
 export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
   // Usar React.use para acceder a los parámetros
   const { id } = React.use(params)
-
   const router = useRouter()
   const [order, setOrder] = useState<Order | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<Product[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -163,7 +161,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       // Redondear a 2 decimales y actualizar la cantidad
       const roundedQuantity = Math.round(quantity * 100) / 100
       const clampedQuantity = Math.max(QUANTITY_LIMITS.MIN, Math.min(QUANTITY_LIMITS.MAX, roundedQuantity))
-
       setCart((prev) =>
         prev.map((item) => (item.cartItemId === cartItemId ? { ...item, quantity: clampedQuantity } : item)),
       )
@@ -176,13 +173,11 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       const normalizedValue = value.replace(",", ".")
       // Regex actualizado para permitir solo 2 decimales
       const regex = /^\d*\.?\d{0,2}$/
-
       if (regex.test(normalizedValue) || value === "") {
         setEditingQuantity({
           cartItemId,
           value: value,
         })
-
         if (normalizedValue !== "") {
           const numValue = Number.parseFloat(normalizedValue)
           if (!isNaN(numValue) && numValue > 0) {
@@ -201,14 +196,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       if (editingQuantity && editingQuantity.cartItemId === cartItemId) {
         const normalizedValue = editingQuantity.value.replace(",", ".")
         const numValue = Number.parseFloat(normalizedValue)
-
         if (!isNaN(numValue) && numValue > 0) {
           updateQuantity(cartItemId, numValue)
         } else {
           // Si el valor no es válido, establecer a 0.01 como mínimo
           updateQuantity(cartItemId, QUANTITY_LIMITS.MIN)
         }
-
         setEditingQuantity(null)
       }
     },
@@ -229,7 +222,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const fetchOrderData = useCallback(async () => {
     try {
       setIsLoading(true)
-
       // Obtener unidades de medida
       const unitResponse = await api.get("/unit-measurements")
       setUnitMeasurements(unitResponse.data || [])
@@ -241,7 +233,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       // Obtener detalles del pedido
       const response = await api.get(`/orders/${id}`)
       const orderData = response.data
-
       setOrder(orderData)
 
       // Initialize observation from order data
@@ -249,11 +240,9 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
       // Convertir items del pedido al formato del carrito
       const cartItems: CartItem[] = []
-
       for (const item of orderData.orderItems) {
         // Obtener detalles completos del producto si no están disponibles
         let productDetails = item.product
-
         if (!productDetails) {
           const productResponse = await api.get(`/products/${item.productId}`)
           productDetails = productResponse.data
@@ -276,7 +265,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             name: "Unidad",
             description: "Unidad estándar",
           }
-
           productDetails.productUnits = [
             {
               id: 1,
@@ -326,16 +314,13 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       setSearchResults([])
       return
     }
-
     try {
       setIsSearching(true)
-
       // Filtrar productos localmente en lugar de hacer una llamada API
       const query = searchQuery.toLowerCase()
       const filtered = allProducts.filter(
         (product) => product.name.toLowerCase().includes(query) || product.description.toLowerCase().includes(query),
       )
-
       setSearchResults(filtered.slice(0, 5)) // Limitar a 5 resultados
     } catch (error) {
       console.error("Error al buscar productos:", error)
@@ -360,7 +345,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         setShowSearchHelp(true)
       }
     }, 300)
-
     return () => clearTimeout(timer)
   }, [searchQuery, handleSearch])
 
@@ -385,7 +369,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     // Mostrar mensaje de éxito
     const selectedUnit = product.productUnits?.find((pu) => pu.unitMeasurement.id === unitId)
     const unitName = selectedUnit?.unitMeasurement.name || "Unidad"
-
     toast.success("Producto añadido", {
       description: `${product.name} (${unitName}) ha sido añadido al pedido.`,
     })
@@ -405,9 +388,48 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     if (!item.productUnits || !Array.isArray(item.productUnits)) {
       return "Unidad"
     }
-
     const selectedUnit = item.productUnits.find((pu) => pu.unitMeasurement.id === item.selectedUnitId)
     return selectedUnit?.unitMeasurement.name || "Unidad"
+  }
+
+  // Función para eliminar el pedido
+  const handleDeleteOrder = async () => {
+    if (!order) return
+
+    // Mostrar confirmación
+    const confirmed = window.confirm(
+      `¿Estás seguro que quieres eliminar el pedido #${order.id}?\n\nEsta acción no se puede deshacer.`,
+    )
+
+    if (!confirmed) return
+
+    try {
+      setIsDeleting(true)
+      await api.delete(`/orders/${order.id}`)
+
+      toast.success("Pedido eliminado", {
+        description: "El pedido ha sido eliminado correctamente.",
+      })
+
+      // Redirigir al historial después de eliminar
+      setTimeout(() => {
+        router.push("/users/history")
+      }, 1500)
+    } catch (error: unknown) {
+      console.error("Error al eliminar el pedido:", error)
+
+      let errorMessage = "No se pudo eliminar el pedido. Por favor, intenta nuevamente."
+      if (error instanceof AxiosError && error.response?.data) {
+        const apiError = error.response.data as ApiErrorResponse
+        errorMessage = apiError.message || errorMessage
+      }
+
+      toast.error("Error al eliminar el pedido", {
+        description: errorMessage,
+      })
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   // Guardar cambios en el pedido
@@ -416,7 +438,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
     try {
       setIsSubmitting(true)
-
       // Preparar los datos para la actualización
       const updateData = {
         userId: Number(order.userId),
@@ -450,10 +471,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       }, 1500)
     } catch (error: unknown) {
       console.error("Error al actualizar el pedido:", error)
-
       // Manejar el error con tipado adecuado
       let errorMessage = "No se pudo actualizar el pedido. Por favor, intenta nuevamente."
-
       if (error instanceof AxiosError && error.response?.data) {
         const apiError = error.response.data as ApiErrorResponse
         errorMessage = apiError.message || errorMessage
@@ -487,40 +506,40 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       @media print {
         body * { visibility: hidden; }
         .print-section, .print-section * { visibility: visible; }
-        .print-section { 
-          position: absolute; 
-          left: 0; 
-          top: 0; 
-          width: 100%; 
+        .print-section {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
           background: white;
           padding: 20px;
         }
         .no-print { display: none !important; }
-        .print-header { 
-          text-align: center; 
-          margin-bottom: 30px; 
+        .print-header {
+          text-align: center;
+          margin-bottom: 30px;
           border-bottom: 2px solid #000;
           padding-bottom: 20px;
         }
-        .print-info { 
-          display: grid; 
-          grid-template-columns: 1fr 1fr; 
-          gap: 30px; 
-          margin-bottom: 30px; 
+        .print-info {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 30px;
+          margin-bottom: 30px;
         }
-        .print-table { 
-          width: 100%; 
-          border-collapse: collapse; 
+        .print-table {
+          width: 100%;
+          border-collapse: collapse;
           margin-bottom: 20px;
         }
-        .print-table th, .print-table td { 
-          border: 1px solid #000; 
-          padding: 8px; 
-          text-align: left; 
+        .print-table th, .print-table td {
+          border: 1px solid #000;
+          padding: 8px;
+          text-align: left;
         }
-        .print-table th { 
-          background-color: #f0f0f0; 
-          font-weight: bold; 
+        .print-table th {
+          background-color: #f0f0f0;
+          font-weight: bold;
         }
         .print-table tbody tr {
           page-break-inside: avoid;
@@ -528,11 +547,11 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         .print-table thead {
           display: table-header-group;
         }
-        .print-total { 
-          text-align: right; 
-          font-size: 18px; 
-          font-weight: bold; 
-          margin-top: 20px; 
+        .print-total {
+          text-align: right;
+          font-size: 18px;
+          font-weight: bold;
+          margin-top: 20px;
         }
         /* Ensure proper page breaks */
         @page {
@@ -613,7 +632,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       </html>
     `)
       printWindow.document.close()
-
       // Wait for load and then print
       printWindow.onload = () => {
         setTimeout(() => {
@@ -647,7 +665,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
       // Configure font
       doc.setFont("helvetica")
-
       let yPos = margin
 
       // Title
@@ -659,10 +676,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       // Basic information
       doc.setFontSize(12)
       doc.setFont("helvetica", "normal")
-
       doc.text(`Estado: ${order.status}`, margin, yPos)
       yPos += 10
-
       const dateText = order.createdAt
         ? format(new Date(order.createdAt), "dd 'de' MMMM 'de' yyyy", { locale: es })
         : "Fecha no disponible"
@@ -674,7 +689,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       doc.text("INFORMACIÓN DEL ÁREA", margin, yPos)
       doc.setFont("helvetica", "normal")
       yPos += 10
-
       const areaName = order.area ? order.area.name : `Área #${order.areaId}`
       doc.text(`Área: ${areaName}`, margin, yPos)
       yPos += 15
@@ -686,22 +700,18 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           doc.addPage()
           yPos = margin
         }
-
         doc.setFont("helvetica", "bold")
         doc.text("OBSERVACIONES:", margin, yPos)
         doc.setFont("helvetica", "normal")
         yPos += 10
-
         // Split long text into multiple lines
         const splitText = doc.splitTextToSize(observation, usableWidth)
         const textHeight = splitText.length * 7
-
         // Check if observation fits on current page
         if (yPos + textHeight > pageHeight - margin) {
           doc.addPage()
           yPos = margin
         }
-
         doc.text(splitText, margin, yPos)
         yPos += textHeight + 10
       }
@@ -712,7 +722,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         doc.addPage()
         yPos = margin
       }
-
       doc.setFont("helvetica", "bold")
       doc.text("PRODUCTOS", margin, yPos)
       yPos += 15
@@ -728,22 +737,18 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         // Header background
         doc.setFillColor(240, 240, 240)
         doc.rect(margin, startY, usableWidth, headerHeight, "F")
-
         // Header borders
         doc.setDrawColor(0, 0, 0)
         doc.setLineWidth(0.5)
         doc.rect(margin, startY, usableWidth, headerHeight)
-
         // Vertical lines for header
         doc.line(colPositions[1], startY, colPositions[1], startY + headerHeight)
         doc.line(colPositions[2], startY, colPositions[2], startY + headerHeight)
-
         // Header text
         doc.setFont("helvetica", "bold")
         doc.text("Producto", colPositions[0] + 2, startY + 10)
         doc.text("Cantidad", colPositions[1] + 2, startY + 10)
         doc.text("Unidad", colPositions[2] + 2, startY + 10)
-
         return startY + headerHeight
       }
 
@@ -752,7 +757,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
       // Table rows
       doc.setFont("helvetica", "normal")
-
       cart.forEach((item, index) => {
         // Check if we need a new page
         if (yPos + rowHeight > pageHeight - margin) {
@@ -771,7 +775,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         // Row borders
         doc.setDrawColor(0, 0, 0)
         doc.rect(margin, yPos, usableWidth, rowHeight)
-
         // Vertical lines
         doc.line(colPositions[1], yPos, colPositions[1], yPos + rowHeight)
         doc.line(colPositions[2], yPos, colPositions[2], yPos + rowHeight)
@@ -820,12 +823,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   // Agrupar productos por tipo y unidad para mostrar contadores
   const getProductCounts = useCallback(() => {
     const counts: Record<string, number> = {}
-
     cart.forEach((item) => {
       const key = `${item.id}-${item.selectedUnitId}`
       counts[key] = (counts[key] || 0) + 1
     })
-
     return counts
   }, [cart])
 
@@ -840,7 +841,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           </Button>
           <h1 className="text-lg font-semibold md:text-xl">Cargando pedido...</h1>
         </header>
-
         <main className="flex-1 p-4 md:p-6">
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -860,7 +860,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           </Button>
           <h1 className="text-lg font-semibold md:text-xl">Pedido no encontrado</h1>
         </header>
-
         <main className="flex-1 p-4 md:p-6">
           <Alert variant="destructive">
             <AlertTitle>Error</AlertTitle>
@@ -869,7 +868,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
               nuevamente.
             </AlertDescription>
           </Alert>
-
           <Button className="mt-4" onClick={handleCancel}>
             Volver al historial
           </Button>
@@ -885,13 +883,13 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex flex-1 items-center justify-between">
-          <h1 className="text-lg font-semibold md:text-xl">Editar Pedido #{order.id}</h1>
+          <h1 className="text-lg font-semibold md:text-xl">Detalle del Pedido #{order.id}</h1>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1">
+            <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1 bg-transparent">
               <Printer className="h-4 w-4" />
               <span className="hidden sm:inline">Imprimir</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={handleDownload} className="gap-1">
+            <Button variant="outline" size="sm" onClick={handleDownload} className="gap-1 bg-transparent">
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Descargar</span>
             </Button>
@@ -934,7 +932,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
               disabled={isSubmitting}
             />
             <Search className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-
             {isSearching && (
               <div className="absolute right-3 top-2.5">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -976,7 +973,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                             <div className="flex-1">
                               <div className="flex items-center justify-between">
                                 <h4 className="font-medium text-sm">{product.name}</h4>
-
                                 {/* Mostrar contador si el producto ya está en el carrito */}
                                 {product.productUnits &&
                                   product.productUnits.some((pu) => {
@@ -991,15 +987,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                                     </Badge>
                                   )}
                               </div>
-
                               <p className="text-xs text-muted-foreground line-clamp-1">{product.description}</p>
-
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {product.productUnits && product.productUnits.length > 0 ? (
                                   product.productUnits.map((pu) => {
                                     const key = `${product.id}-${pu.unitMeasurement.id}`
                                     const count = productCounts[key] || 0
-
                                     return (
                                       <Button
                                         key={pu.id}
@@ -1038,7 +1031,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         {/* Lista de productos en el pedido */}
         <div className="mb-6">
           <h3 className="text-base font-medium mb-2">Productos en el pedido</h3>
-
           {cart.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center p-8 border rounded-lg bg-muted/20">
               <ShoppingCart className="h-10 w-10 text-muted-foreground/50 mb-2" />
@@ -1077,14 +1069,13 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                       </div>
                     </div>
                   </div>
-
                   {/* Control de cantidad con soporte para decimales hasta 0.01 */}
                   <div className="mt-3 flex items-center justify-center">
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 rounded-full flex-shrink-0"
+                        className="h-8 w-8 rounded-full flex-shrink-0 bg-transparent"
                         onClick={() =>
                           updateQuantity(
                             item.cartItemId,
@@ -1096,7 +1087,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                         <Minus className="h-3 w-3" />
                         <span className="sr-only">Disminuir</span>
                       </Button>
-
                       <div className="flex flex-col items-center">
                         {editingQuantity && editingQuantity.cartItemId === item.cartItemId ? (
                           <Input
@@ -1126,11 +1116,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                         )}
                         <span className="text-xs text-muted-foreground mt-1">{getUnitName(item)}</span>
                       </div>
-
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-8 w-8 rounded-full flex-shrink-0"
+                        className="h-8 w-8 rounded-full flex-shrink-0 bg-transparent"
                         onClick={() => updateQuantity(item.cartItemId, item.quantity + QUANTITY_LIMITS.STEP)}
                         disabled={isSubmitting}
                       >
@@ -1165,24 +1154,42 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
         {/* Botones de acción */}
         <div className="flex flex-col sm:flex-row justify-between gap-3">
-          <Button variant="outline" onClick={handleCancel} disabled={isSubmitting} className="order-2 sm:order-1">
+          <Button
+            variant="outline"
+            onClick={handleCancel}
+            disabled={isSubmitting || isDeleting}
+            className="order-2 sm:order-1 bg-transparent"
+          >
             Cancelar
           </Button>
-
           <div className="flex flex-col sm:flex-row gap-2 order-1 sm:order-2">
             <Button
               variant="destructive"
+              onClick={handleDeleteOrder}
+              disabled={isSubmitting || isDeleting}
+              className="w-full sm:w-auto"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                "Eliminar pedido"
+              )}
+            </Button>
+            <Button
+              variant="outline"
               onClick={() => setCart([])}
-              disabled={cart.length === 0 || isSubmitting}
+              disabled={cart.length === 0 || isSubmitting || isDeleting}
               className="w-full sm:w-auto"
             >
               Vaciar pedido
             </Button>
-
             <Button
               className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
               onClick={handleSaveChanges}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isDeleting}
             >
               {isSubmitting ? (
                 <>
