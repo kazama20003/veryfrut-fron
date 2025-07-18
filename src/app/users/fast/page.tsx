@@ -87,6 +87,18 @@ interface ProductOption {
   searchText: string
 }
 
+// Interfaz para la respuesta del servidor al crear una orden
+interface CreateOrderResponse {
+  id: number
+  userId: number
+  areaId: number
+  totalAmount: number
+  status: OrderStatus
+  observation?: string
+  createdAt: string
+  updatedAt: string
+}
+
 // Función para decodificar JWT token
 const decodeJWT = (token: string) => {
   try {
@@ -108,14 +120,12 @@ const decodeJWT = (token: string) => {
 export default function NewOrderPage() {
   const router = useRouter()
   const searchInputRef = useRef<HTMLInputElement>(null)
-
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
   const [customerSearch, setCustomerSearch] = useState("")
   const [productSearch, setProductSearch] = useState("")
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("")
@@ -124,7 +134,6 @@ export default function NewOrderPage() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [observation, setObservation] = useState("")
   const [status, setStatus] = useState<OrderStatus>(OrderStatus.CREATED)
-
   const [areaBlocked, setAreaBlocked] = useState(false)
   const [checkingArea, setCheckingArea] = useState(false)
   const [areaBlockMessage, setAreaBlockMessage] = useState("")
@@ -144,7 +153,6 @@ export default function NewOrderPage() {
     const now = new Date()
     const utc = now.getTime() + now.getTimezoneOffset() * 60000
     const limaTime = new Date(utc + -5 * 3600000)
-
     const year = limaTime.getFullYear()
     const month = String(limaTime.getMonth() + 1).padStart(2, "0")
     const day = String(limaTime.getDate()).padStart(2, "0")
@@ -172,7 +180,6 @@ export default function NewOrderPage() {
       // Obtener información completa del usuario desde la API
       const userResponse = await api.get(`/users/${userId}`)
       const userData = userResponse.data
-
       console.log("Datos del usuario obtenidos:", userData)
 
       if (!userData.id || !userData.email || !userData.role) {
@@ -185,8 +192,6 @@ export default function NewOrderPage() {
       return null
     }
   }
-
- 
 
   // Cargar usuario actual y datos
   useEffect(() => {
@@ -216,7 +221,6 @@ export default function NewOrderPage() {
           // Si es cliente, usar automáticamente sus datos
           setSelectedCustomerId(userData.id.toString())
           setSelectedCustomer(userData as Customer)
-
           // Si tiene áreas, seleccionar la primera por defecto
           if (userData.areas && userData.areas.length > 0) {
             setSelectedAreaId(userData.areas[0].id.toString())
@@ -245,7 +249,6 @@ export default function NewOrderPage() {
     if (isAdmin && selectedCustomerId) {
       const customer = customers.find((c) => c.id === Number(selectedCustomerId))
       setSelectedCustomer(customer || null)
-
       if (customer?.areas && customer.areas.length > 0) {
         setSelectedAreaId(customer.areas[0].id.toString())
       } else {
@@ -272,7 +275,6 @@ export default function NewOrderPage() {
       try {
         const limaDate = getLimaPeruDate()
         console.log(`Verificando pedido para área ${selectedAreaId} en fecha ${limaDate}`)
-
         const response = await api.get(`/orders/check?areaId=${selectedAreaId}&date=${limaDate}`)
         console.log("Respuesta de verificación:", response.data)
 
@@ -283,7 +285,6 @@ export default function NewOrderPage() {
           setAreaBlockMessage(
             "⚠️ PEDIDO EXISTENTE: Ya tienes un pedido creado para esta área el día de hoy. No puedes crear otro pedido hasta mañana.",
           )
-
           toast.error("Pedido ya existe para hoy", {
             description: "Ya existe un pedido para esta área hoy. Solo se permite un pedido por área por día.",
             action: {
@@ -360,7 +361,6 @@ export default function NewOrderPage() {
   // Manejar navegación con teclado en búsqueda
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     const searchResults = getFilteredProductOptions()
-
     if (e.key === "ArrowDown") {
       e.preventDefault()
       setSelectedSearchIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : 0))
@@ -393,12 +393,10 @@ export default function NewOrderPage() {
       newItems[existingIndex].quantity = newQuantity
       newItems[existingIndex].total = newQuantity * newItems[existingIndex].price
       setOrderItems(newItems)
-
       setQuantityInputs((prev) => ({
         ...prev,
         [existingIndex]: newQuantity.toString(),
       }))
-
       toast.success("Cantidad actualizada", {
         description: `${productOption.productName} - ${productOption.unitMeasurementName}: ${newQuantity}`,
       })
@@ -412,14 +410,12 @@ export default function NewOrderPage() {
         unitMeasurementId: productOption.unitMeasurementId,
         unitMeasurementName: productOption.unitMeasurementName,
       }
-
       const newIndex = orderItems.length
       setOrderItems([...orderItems, newItem])
       setQuantityInputs((prev) => ({
         ...prev,
         [newIndex]: "1",
       }))
-
       toast.success("Producto agregado", {
         description: `${productOption.productName} - ${productOption.unitMeasurementName}`,
       })
@@ -428,7 +424,6 @@ export default function NewOrderPage() {
     setProductSearch("")
     setShowProductSearch(false)
     setSelectedSearchIndex(-1)
-
     setTimeout(() => {
       searchInputRef.current?.focus()
     }, 100)
@@ -439,7 +434,6 @@ export default function NewOrderPage() {
     const newItems = [...orderItems]
     newItems.splice(index, 1)
     setOrderItems(newItems)
-
     const newQuantityInputs = { ...quantityInputs }
     delete newQuantityInputs[index]
     setQuantityInputs(newQuantityInputs)
@@ -593,18 +587,18 @@ export default function NewOrderPage() {
         })),
       }
 
-      await api.post("/orders", orderData)
+      // Crear la orden y capturar la respuesta con el ID
+      const response = await api.post("/orders", orderData)
+      const createdOrder: CreateOrderResponse = response.data
+
+      console.log("Orden creada exitosamente:", createdOrder)
 
       toast.success("¡Pedido creado exitosamente!", {
         description: `Se creó el pedido con ${orderItems.length} productos.`,
-        action: {
-          label: "Ver historial",
-          onClick: () => router.push("/users/history"),
-        },
       })
 
-      // Refrescar la página completa después de crear la orden
-      window.location.reload()
+      // Redirigir a la página de historial específica de la orden creada
+      router.push(`/users/history/${createdOrder.id}`)
     } catch (err) {
       console.error("Error al crear el pedido:", err)
       toast.error("Error al crear el pedido", {
@@ -692,7 +686,6 @@ export default function NewOrderPage() {
                     )}
                   </SelectContent>
                 </Select>
-
                 {areaBlockMessage && (
                   <div
                     className={`text-sm p-3 rounded-lg flex items-start gap-2 ${
@@ -821,7 +814,6 @@ export default function NewOrderPage() {
                           <div className="font-medium text-sm">
                             {result.productName} - {result.unitMeasurementName}
                           </div>
-      
                         </div>
                         <Plus className="h-4 w-4 text-green-600" />
                       </div>
@@ -877,7 +869,6 @@ export default function NewOrderPage() {
                                       <span>
                                         {product.name} - {unit.unitMeasurement.name}
                                       </span>
-                                
                                     </div>
                                   </SelectItem>
                                 )),

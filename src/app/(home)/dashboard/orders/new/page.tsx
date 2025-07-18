@@ -1,15 +1,14 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Plus, Trash2, Save, Loader2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Save, Loader2, AlertTriangle, Shield } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -64,20 +63,8 @@ interface OrderItem {
   unitMeasurementName: string
 }
 
-// Interfaz para las opciones del dropdown que combina producto y unidad
-// Eliminar esta interfaz
-// interface ProductUnitOption {
-//   productId: number
-//   productName: string
-//   unitMeasurementId: number
-//   unitMeasurementName: string
-//   price: number
-//   displayText: string
-// }
-
 export default function NewOrderPage() {
   const router = useRouter()
-
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,7 +72,6 @@ export default function NewOrderPage() {
   const [error, setError] = useState<string | null>(null)
   const [customerSearch, setCustomerSearch] = useState("")
   const [productSearch, setProductSearch] = useState("")
-
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [selectedAreaId, setSelectedAreaId] = useState<string>("")
@@ -93,29 +79,73 @@ export default function NewOrderPage() {
   const [observation, setObservation] = useState("")
   const [status, setStatus] = useState<OrderStatus>(OrderStatus.CREATED)
 
+  // Estados para validación de área
   const [areaBlocked, setAreaBlocked] = useState(false)
   const [checkingArea, setCheckingArea] = useState(false)
   const [areaBlockMessage, setAreaBlockMessage] = useState("")
+  const [lastCheckedArea, setLastCheckedArea] = useState<string>("")
 
   // Para manejar inputs de cantidad como strings para mejor UX
   const [quantityInputs, setQuantityInputs] = useState<Record<number, string>>({})
 
-  // Crear opciones combinadas de producto + unidad de medida
-  // const productUnitOptions: ProductUnitOption[] = products.flatMap((product) =>
-  //   product.productUnits.map((unit) => ({
-  //     productId: product.id,
-  //     productName: product.name,
-  //     unitMeasurementId: unit.unitMeasurementId,
-  //     unitMeasurementName: unit.unitMeasurement.name,
-  //     price: product.price,
-  //     displayText: `${product.name} - ${unit.unitMeasurement.name}`,
-  //   })),
-  // )
+  // Función para obtener la fecha actual en formato consistente
+  const getCurrentDate = useCallback(() => {
+    const now = new Date()
+    // Asegurar que usamos la zona horaria local
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, "0")
+    const day = String(now.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }, [])
 
-  // Filtrar opciones por búsqueda
-  // const filteredProductUnitOptions = productUnitOptions.filter((option) =>
-  //   option.displayText.toLowerCase().includes(productSearch.toLowerCase()),
-  // )
+  // Función mejorada para verificar disponibilidad del área
+  const checkAreaAvailability = useCallback(
+    async (areaId: string) => {
+      if (!areaId || areaId === lastCheckedArea) {
+        return
+      }
+
+      setCheckingArea(true)
+      setAreaBlocked(false)
+      setAreaBlockMessage("")
+      setLastCheckedArea(areaId)
+
+      try {
+        const today = getCurrentDate()
+        console.log(`🔍 Verificando área ${areaId} para fecha ${today}`)
+
+        const response = await api.get(`/orders/check?areaId=${areaId}&date=${today}`)
+
+        if (response.data.exists) {
+          console.log(`❌ Área ${areaId} bloqueada - pedido ya existe`)
+          setAreaBlocked(true)
+          setAreaBlockMessage(
+            `🚫 ÁREA BLOQUEADA: Ya existe un pedido para esta área hoy (${today}). No se puede crear otro pedido para el mismo día.`,
+          )
+          toast.warning("Área no disponible", {
+            description: "Ya existe un pedido para esta área en la fecha actual.",
+          })
+        } else {
+          console.log(`✅ Área ${areaId} disponible`)
+          setAreaBlocked(false)
+          setAreaBlockMessage("")
+        }
+      } catch (err) {
+        console.error("❌ Error al verificar disponibilidad del área:", err)
+        // En caso de error de red, ser conservador y bloquear
+        setAreaBlocked(true)
+        setAreaBlockMessage(
+          "⚠️ ERROR DE VERIFICACIÓN: No se pudo verificar la disponibilidad del área. Por seguridad, la creación está bloqueada.",
+        )
+        toast.error("Error de verificación", {
+          description: "No se pudo verificar la disponibilidad del área. Intenta de nuevo.",
+        })
+      } finally {
+        setCheckingArea(false)
+      }
+    },
+    [getCurrentDate, lastCheckedArea],
+  )
 
   // Cargar clientes y productos
   useEffect(() => {
@@ -124,7 +154,6 @@ export default function NewOrderPage() {
       setError(null)
       try {
         const [usersRes, productsRes] = await Promise.all([api.get("/users"), api.get("/products")])
-
         setCustomers(usersRes.data)
         setProducts(productsRes.data)
       } catch (err) {
@@ -134,7 +163,6 @@ export default function NewOrderPage() {
         setLoading(false)
       }
     }
-
     fetchData()
   }, [])
 
@@ -143,66 +171,47 @@ export default function NewOrderPage() {
     if (selectedCustomerId) {
       const customer = customers.find((c) => c.id === Number(selectedCustomerId))
       setSelectedCustomer(customer || null)
+      // Resetear área cuando cambia el cliente
+      setSelectedAreaId("")
+      setAreaBlocked(false)
+      setAreaBlockMessage("")
+      setLastCheckedArea("")
 
       // Si el cliente tiene áreas, seleccionar la primera por defecto
       if (customer?.areas && customer.areas.length > 0) {
-        setSelectedAreaId(customer.areas[0].id.toString())
-      } else {
-        setSelectedAreaId("")
+        const firstAreaId = customer.areas[0].id.toString()
+        setSelectedAreaId(firstAreaId)
       }
     } else {
       setSelectedCustomer(null)
       setSelectedAreaId("")
+      setAreaBlocked(false)
+      setAreaBlockMessage("")
+      setLastCheckedArea("")
     }
   }, [selectedCustomerId, customers])
 
-  // Verificar si ya existe un pedido para el área seleccionada
+  // Verificar disponibilidad cuando cambia el área
   useEffect(() => {
-    const checkAreaAvailability = async () => {
-      if (!selectedAreaId) {
-        setAreaBlocked(false)
-        setAreaBlockMessage("")
-        return
-      }
+    if (selectedAreaId && selectedAreaId !== lastCheckedArea) {
+      // Debounce la verificación para evitar múltiples llamadas
+      const timeoutId = setTimeout(() => {
+        checkAreaAvailability(selectedAreaId)
+      }, 300)
 
-      setCheckingArea(true)
+      return () => clearTimeout(timeoutId)
+    } else if (!selectedAreaId) {
       setAreaBlocked(false)
       setAreaBlockMessage("")
-
-      try {
-        // Obtener la fecha actual en formato YYYY-MM-DD
-        const today = new Date().toISOString().split("T")[0]
-
-        const response = await api.get(`/orders/check?areaId=${selectedAreaId}&date=${today}`)
-
-        if (response.data.exists) {
-          setAreaBlocked(true)
-          setAreaBlockMessage(
-            "⚠️ BLOQUEADO: Ya existe un pedido para esta área en la fecha actual (hoy). No se puede crear otro pedido para el mismo día.",
-          )
-        } else {
-          setAreaBlocked(false)
-          setAreaBlockMessage("")
-        }
-      } catch (err) {
-        console.error("Error al verificar disponibilidad del área:", err)
-        // En caso de error, permitir continuar pero mostrar advertencia
-        setAreaBlocked(false)
-        setAreaBlockMessage("No se pudo verificar la disponibilidad del área. Procede con precaución.")
-      } finally {
-        setCheckingArea(false)
-      }
+      setLastCheckedArea("")
     }
-
-    checkAreaAvailability()
-  }, [selectedAreaId])
+  }, [selectedAreaId, checkAreaAvailability, lastCheckedArea])
 
   // Filtrar clientes por búsqueda
   const filteredCustomers = customers.filter((customer) => {
     const fullName = `${customer.firstName} ${customer.lastName}`.toLowerCase()
     const email = customer.email?.toLowerCase() || ""
     const searchTerm = customerSearch.toLowerCase()
-
     return fullName.includes(searchTerm) || email.includes(searchTerm)
   })
 
@@ -217,11 +226,8 @@ export default function NewOrderPage() {
       unitMeasurementId: 0,
       unitMeasurementName: "",
     }
-
     const newIndex = orderItems.length
     setOrderItems([...orderItems, newItem])
-
-    // Inicializar el input de cantidad como "0"
     setQuantityInputs((prev) => ({
       ...prev,
       [newIndex]: "0",
@@ -233,24 +239,19 @@ export default function NewOrderPage() {
     const newItems = [...orderItems]
     newItems.splice(index, 1)
     setOrderItems(newItems)
-
-    // Eliminar el input de cantidad correspondiente
     const newQuantityInputs = { ...quantityInputs }
     delete newQuantityInputs[index]
     setQuantityInputs(newQuantityInputs)
   }
 
-  // Actualizar cantidad de un producto - maneja el input como string
+  // Actualizar cantidad de un producto
   const handleQuantityInputChange = (index: number, value: string) => {
-    // Permitir valores vacíos, "0", "0." y decimales
-    // Validar que solo contenga números y un punto decimal
     if (value === "" || value === "0" || value === "0." || /^[0-9]*\.?[0-9]{0,2}$/.test(value)) {
       setQuantityInputs((prev) => ({
         ...prev,
         [index]: value,
       }))
 
-      // Actualizar el valor numérico en el orderItem
       const numValue = value === "" || value === "0." ? 0 : Number.parseFloat(value)
       if (!isNaN(numValue)) {
         const newItems = [...orderItems]
@@ -264,7 +265,6 @@ export default function NewOrderPage() {
   // Actualizar producto y unidad seleccionados
   const handleProductUnitChange = (index: number, optionKey: string) => {
     const [productId, unitMeasurementId] = optionKey.split("-").map(Number)
-
     const product = products.find((p) => p.id === productId)
     if (!product) return
 
@@ -272,7 +272,6 @@ export default function NewOrderPage() {
     if (!unit) return
 
     const currentQuantity = orderItems[index].quantity
-
     const newItems = [...orderItems]
     newItems[index].productId = product.id
     newItems[index].productName = product.name
@@ -288,7 +287,7 @@ export default function NewOrderPage() {
     return orderItems.reduce((sum, item) => sum + item.total, 0)
   }
 
-  // Validar formulario
+  // Validar formulario con validaciones mejoradas
   const validateForm = () => {
     if (!selectedCustomerId) {
       toast.error("Error de validación", {
@@ -304,11 +303,18 @@ export default function NewOrderPage() {
       return false
     }
 
-    // VALIDACIÓN CRÍTICA: Bloquear si ya existe un pedido para esta área hoy
+    // VALIDACIÓN CRÍTICA: Verificar bloqueo de área
     if (areaBlocked) {
-      toast.error("Pedido duplicado no permitido", {
-        description:
-          "Ya existe un pedido para esta área en la fecha actual. No se puede crear otro pedido para el mismo día.",
+      toast.error("🚫 Área bloqueada", {
+        description: "Ya existe un pedido para esta área en la fecha actual. No se puede proceder.",
+      })
+      return false
+    }
+
+    // Verificar si aún se está validando el área
+    if (checkingArea) {
+      toast.warning("Verificación en progreso", {
+        description: "Espera a que se complete la verificación del área.",
       })
       return false
     }
@@ -320,7 +326,6 @@ export default function NewOrderPage() {
       return false
     }
 
-    // Validar que todos los productos estén seleccionados
     const unselectedItems = orderItems.filter((item) => item.productId === 0)
     if (unselectedItems.length > 0) {
       toast.error("Error de validación", {
@@ -329,7 +334,6 @@ export default function NewOrderPage() {
       return false
     }
 
-    // Validar que todas las cantidades sean válidas
     const invalidItems = orderItems.filter((item) => item.quantity <= 0)
     if (invalidItems.length > 0) {
       toast.error("Error de validación", {
@@ -341,35 +345,34 @@ export default function NewOrderPage() {
     return true
   }
 
-  // Enviar formulario
+  // Enviar formulario con verificación final robusta
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // VERIFICACIÓN ADICIONAL: Doble verificación antes de enviar
-    if (areaBlocked) {
-      toast.error("Operación bloqueada", {
-        description: "No se puede crear el pedido. Ya existe un pedido para esta área en la fecha actual.",
-      })
-      return
-    }
-
+    // Validación inicial
     if (!validateForm()) return
 
     setSubmitting(true)
 
     try {
-      // VERIFICACIÓN FINAL: Verificar una vez más antes de enviar al servidor
-      const today = new Date().toISOString().split("T")[0]
-      const checkResponse = await api.get(`/orders/check?areaId=${selectedAreaId}&date=${today}`)
+      // VERIFICACIÓN FINAL CRÍTICA: Doble verificación antes de enviar
+      console.log("🔒 Realizando verificación final antes de crear pedido...")
+      const today = getCurrentDate()
+      const finalCheckResponse = await api.get(`/orders/check?areaId=${selectedAreaId}&date=${today}`)
 
-      if (checkResponse.data.exists) {
-        toast.error("Pedido duplicado detectado", {
-          description: "Se detectó un pedido existente para esta área. La operación ha sido cancelada.",
+      if (finalCheckResponse.data.exists) {
+        console.log("❌ VERIFICACIÓN FINAL FALLÓ - Pedido ya existe")
+        toast.error("🚫 Pedido duplicado detectado", {
+          description: "Se detectó un pedido existente para esta área. La operación ha sido cancelada por seguridad.",
         })
+
+        // Actualizar el estado para reflejar el bloqueo
         setAreaBlocked(true)
-        setAreaBlockMessage("Se detectó un pedido existente para esta área en la fecha actual.")
+        setAreaBlockMessage("🚫 DETECTADO: Se encontró un pedido existente para esta área en la fecha actual.")
         return
       }
+
+      console.log("✅ Verificación final exitosa - Procediendo a crear pedido")
 
       const orderData: CreateOrderDto = {
         userId: Number(selectedCustomerId),
@@ -387,16 +390,39 @@ export default function NewOrderPage() {
 
       const response = await api.post("/orders", orderData)
 
-      toast.success("Pedido creado", {
+      console.log("✅ Pedido creado exitosamente:", response.data.id)
+      toast.success("✅ Pedido creado", {
         description: "El pedido ha sido creado correctamente.",
       })
 
       router.push(`/dashboard/orders/${response.data.id}`)
-    } catch (err) {
-      console.error("Error al crear el pedido:", err)
-      toast.error("Error al crear el pedido", {
-        description: "No se pudo crear el pedido. Por favor, intenta de nuevo.",
-      })
+    } catch (err: unknown) {
+      console.error("❌ Error al crear el pedido:", err)
+
+      // Manejar errores específicos del backend
+      if (err && typeof err === "object" && "response" in err) {
+        const axiosError = err as { response?: { status?: number; data?: { message?: string } } }
+
+        if (axiosError.response?.status === 409) {
+          toast.error("🚫 Pedido duplicado", {
+            description: "Ya existe un pedido para esta área en la fecha actual.",
+          })
+          setAreaBlocked(true)
+          setAreaBlockMessage("🚫 CONFIRMADO: El servidor confirmó que ya existe un pedido para esta área.")
+        } else if (axiosError.response?.status === 400) {
+          toast.error("❌ Datos inválidos", {
+            description: axiosError.response.data?.message || "Los datos del pedido no son válidos.",
+          })
+        } else {
+          toast.error("❌ Error al crear el pedido", {
+            description: "No se pudo crear el pedido. Por favor, intenta de nuevo.",
+          })
+        }
+      } else {
+        toast.error("❌ Error al crear el pedido", {
+          description: "No se pudo crear el pedido. Por favor, intenta de nuevo.",
+        })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -436,6 +462,12 @@ export default function NewOrderPage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Nuevo Pedido</h1>
+        {areaBlocked && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md">
+            <Shield className="h-4 w-4 text-red-600" />
+            <span className="text-sm font-medium text-red-700">Área Protegida</span>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -485,14 +517,12 @@ export default function NewOrderPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">{selectedCustomer.email}</p>
                     </div>
-
                     {selectedCustomer.phone && (
                       <div>
                         <p className="text-xs text-muted-foreground">Teléfono:</p>
                         <p className="text-sm">{selectedCustomer.phone}</p>
                       </div>
                     )}
-
                     {selectedCustomer.address && (
                       <div>
                         <p className="text-xs text-muted-foreground">Dirección:</p>
@@ -504,7 +534,7 @@ export default function NewOrderPage() {
                   <div className="space-y-2">
                     <Label htmlFor="areaId">Área</Label>
                     <Select value={selectedAreaId} onValueChange={setSelectedAreaId} disabled={checkingArea}>
-                      <SelectTrigger id="areaId">
+                      <SelectTrigger id="areaId" className={areaBlocked ? "border-red-300" : ""}>
                         <SelectValue placeholder={checkingArea ? "Verificando..." : "Seleccionar área"} />
                       </SelectTrigger>
                       <SelectContent>
@@ -521,7 +551,7 @@ export default function NewOrderPage() {
                     </Select>
 
                     {checkingArea && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2 text-sm text-blue-600">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Verificando disponibilidad del área...
                       </div>
@@ -529,13 +559,16 @@ export default function NewOrderPage() {
 
                     {areaBlockMessage && (
                       <div
-                        className={`text-sm p-2 rounded-md ${
+                        className={`text-sm p-3 rounded-md border ${
                           areaBlocked
-                            ? "bg-red-50 text-red-700 border border-red-200"
-                            : "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                            ? "bg-red-50 text-red-800 border-red-200"
+                            : "bg-yellow-50 text-yellow-800 border-yellow-200"
                         }`}
                       >
-                        {areaBlockMessage}
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                          <span>{areaBlockMessage}</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -618,16 +651,12 @@ export default function NewOrderPage() {
                           )
                         }
 
-                        // Cambiar esto:
-                        // return searchResults.map((result, idx) => (
-                        // Por esto:
                         return searchResults.map((result) => (
                           <button
                             key={`${result.productId}-${result.unitMeasurementId}`}
                             type="button"
                             className="w-full text-left px-3 py-2 hover:bg-gray-100 border-b last:border-b-0"
                             onClick={() => {
-                              // Agregar el producto automáticamente
                               const newItem: OrderItem = {
                                 productId: result.productId,
                                 productName: result.productName,
@@ -637,15 +666,12 @@ export default function NewOrderPage() {
                                 unitMeasurementId: result.unitMeasurementId,
                                 unitMeasurementName: result.unitMeasurementName,
                               }
-
                               const newIndex = orderItems.length
                               setOrderItems([...orderItems, newItem])
                               setQuantityInputs((prev) => ({
                                 ...prev,
                                 [newIndex]: "0",
                               }))
-
-                              // Limpiar búsqueda
                               setProductSearch("")
                             }}
                           >
@@ -662,6 +688,7 @@ export default function NewOrderPage() {
                 </Button>
               </div>
             </CardHeader>
+
             <CardContent>
               <div className="space-y-4">
                 {orderItems.length === 0 ? (
@@ -682,92 +709,82 @@ export default function NewOrderPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {orderItems.map((item, index) => {
-                          // Eliminar esta línea:
-                          // const currentOptionKey =
-                          //   item.productId && item.unitMeasurementId
-                          //     ? `${item.productId}-${item.unitMeasurementId}`
-                          //     : ""
-
-                          return (
-                            <tr key={index} className="border-t">
-                              <td className="px-4 py-3">
-                                {item.productId === 0 ? (
-                                  <Select value="" onValueChange={(value) => handleProductUnitChange(index, value)}>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Seleccionar producto y unidad..." />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-[300px]">
-                                      {products.flatMap((product) =>
-                                        product.productUnits.map((unit) => (
-                                          <SelectItem
-                                            key={`${product.id}-${unit.unitMeasurementId}`}
-                                            value={`${product.id}-${unit.unitMeasurementId}`}
-                                          >
-                                            {product.name} - {unit.unitMeasurement.name}
-                                          </SelectItem>
-                                        )),
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-medium">
-                                      {item.productName} - {item.unitMeasurementName}
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        const newItems = [...orderItems]
-                                        newItems[index] = {
-                                          productId: 0,
-                                          productName: "",
-                                          quantity: 0,
-                                          price: 0,
-                                          total: 0,
-                                          unitMeasurementId: 0,
-                                          unitMeasurementName: "",
-                                        }
-                                        setOrderItems(newItems)
-                                      }}
-                                      className="text-blue-600 hover:text-blue-800"
-                                    >
-                                      Cambiar
-                                    </Button>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <Input
-                                  type="text"
-                                  inputMode="decimal"
-                                  value={
-                                    quantityInputs[index] !== undefined
-                                      ? quantityInputs[index]
-                                      : item.quantity.toString()
-                                  }
-                                  onChange={(e) => handleQuantityInputChange(index, e.target.value)}
-                                  className="w-20 mx-auto text-center"
-                                  placeholder="0"
-                                  step="0.01"
-                                />
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleRemoveProduct(index)}
-                                  className="h-8 w-8 text-red-500"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </td>
-                            </tr>
-                          )
-                        })}
+                        {orderItems.map((item, index) => (
+                          <tr key={index} className="border-t">
+                            <td className="px-4 py-3">
+                              {item.productId === 0 ? (
+                                <Select value="" onValueChange={(value) => handleProductUnitChange(index, value)}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Seleccionar producto y unidad..." />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-[300px]">
+                                    {products.flatMap((product) =>
+                                      product.productUnits.map((unit) => (
+                                        <SelectItem
+                                          key={`${product.id}-${unit.unitMeasurementId}`}
+                                          value={`${product.id}-${unit.unitMeasurementId}`}
+                                        >
+                                          {product.name} - {unit.unitMeasurement.name}
+                                        </SelectItem>
+                                      )),
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium">
+                                    {item.productName} - {item.unitMeasurementName}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newItems = [...orderItems]
+                                      newItems[index] = {
+                                        productId: 0,
+                                        productName: "",
+                                        quantity: 0,
+                                        price: 0,
+                                        total: 0,
+                                        unitMeasurementId: 0,
+                                        unitMeasurementName: "",
+                                      }
+                                      setOrderItems(newItems)
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800"
+                                  >
+                                    Cambiar
+                                  </Button>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                value={
+                                  quantityInputs[index] !== undefined ? quantityInputs[index] : item.quantity.toString()
+                                }
+                                onChange={(e) => handleQuantityInputChange(index, e.target.value)}
+                                className="w-20 mx-auto text-center"
+                                placeholder="0"
+                                step="0.01"
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveProduct(index)}
+                                className="h-8 w-8 text-red-500"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                       <tfoot className="bg-muted/30">
                         <tr className="border-t">
@@ -781,8 +798,9 @@ export default function NewOrderPage() {
                 )}
               </div>
             </CardContent>
+
             <CardFooter className="flex flex-col sm:flex-row justify-between gap-2">
-              <Button type="button" variant="outline" asChild className="w-full sm:w-auto">
+              <Button type="button" variant="outline" asChild className="w-full sm:w-auto bg-transparent">
                 <Link href="/dashboard/orders">Cancelar</Link>
               </Button>
               <Button
@@ -795,12 +813,17 @@ export default function NewOrderPage() {
                 {submitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creando...
+                    Creando pedido...
                   </>
                 ) : areaBlocked ? (
                   <>
-                    <Save className="mr-2 h-4 w-4" />
-                    Bloqueado - Pedido ya existe
+                    <Shield className="mr-2 h-4 w-4" />
+                    Bloqueado - Área no disponible
+                  </>
+                ) : checkingArea ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verificando área...
                   </>
                 ) : (
                   <>

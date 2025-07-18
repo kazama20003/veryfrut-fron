@@ -1,5 +1,4 @@
 "use client"
-
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -8,7 +7,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-
 import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,7 +45,7 @@ import {
   MessageSquare,
 } from "lucide-react"
 import Link from "next/link"
-import { format, isSameDay, parseISO } from "date-fns"
+import { format, isSameDay, parseISO, isValid } from "date-fns"
 import { es } from "date-fns/locale"
 import { api } from "@/lib/axiosInstance"
 import type { OrderStatus } from "@/types/order"
@@ -111,32 +109,86 @@ function getAreaName(areaId?: number) {
   return area ? area.name : `Área #${areaId}`
 }
 
-// Función para generar el número de orden diario
+// Función mejorada para generar el número de orden diario
 function generateDailyOrderNumber(order: Order, allOrders: Order[]): string {
-  if (!order.createdAt) return `#${order.id}`
+  // Fallback si no hay fecha de creación
+  if (!order.createdAt) {
+    console.warn(`Order ${order.id} has no createdAt date`)
+    return `#${order.id}`
+  }
 
   try {
     const orderDate = parseISO(order.createdAt)
 
-    // Filtrar órdenes del mismo día y ordenarlas por fecha de creación
+    // Verificar que la fecha sea válida
+    if (!isValid(orderDate)) {
+      console.warn(`Order ${order.id} has invalid createdAt date: ${order.createdAt}`)
+      return `#${order.id}`
+    }
+
+    // Filtrar órdenes del mismo día que tengan fechas válidas
     const ordersFromSameDay = allOrders
-      .filter((o) => o.createdAt && isSameDay(parseISO(o.createdAt), orderDate))
-      .sort((a, b) => {
-        if (!a.createdAt || !b.createdAt) return 0
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      .filter((o) => {
+        if (!o.createdAt) return false
+        try {
+          const oDate = parseISO(o.createdAt)
+          return isValid(oDate) && isSameDay(oDate, orderDate)
+        } catch (error) {
+          console.warn(`Error parsing date for order ${o.id}:`, error)
+          return false
+        }
       })
+      .sort((a, b) => {
+        // Ordenar por fecha de creación, luego por ID como fallback
+        const dateA = new Date(a.createdAt!).getTime()
+        const dateB = new Date(b.createdAt!).getTime()
+        if (dateA === dateB) {
+          return a.id - b.id // Usar ID como criterio secundario
+        }
+        return dateA - dateB
+      })
+
+    // Verificar que tenemos órdenes del mismo día
+    if (ordersFromSameDay.length === 0) {
+      console.warn(`No orders found for the same day as order ${order.id}`)
+      return `#1 (${format(orderDate, "EEEE dd/MM", { locale: es })})`
+    }
 
     // Encontrar la posición de la orden actual en el día
     const orderIndex = ordersFromSameDay.findIndex((o) => o.id === order.id)
+
+    // Si no se encuentra la orden, usar un fallback
+    if (orderIndex === -1) {
+      console.warn(`Order ${order.id} not found in same day orders array`)
+      // Intentar encontrar la posición basada en la fecha y ID
+      const orderTime = new Date(order.createdAt).getTime()
+      let position = 1
+      for (const dayOrder of ordersFromSameDay) {
+        const dayOrderTime = new Date(dayOrder.createdAt!).getTime()
+        if (dayOrderTime < orderTime || (dayOrderTime === orderTime && dayOrder.id < order.id)) {
+          position++
+        }
+      }
+      const dailyNumber = position
+      const dayName = format(orderDate, "EEEE", { locale: es })
+      const dayNumber = format(orderDate, "dd/MM")
+      return `#${dailyNumber} (${dayName} ${dayNumber})`
+    }
+
     const dailyNumber = orderIndex + 1
+
+    // Verificar que el número diario sea válido
+    if (dailyNumber <= 0) {
+      console.warn(`Invalid daily number ${dailyNumber} for order ${order.id}`)
+      return `#1 (${format(orderDate, "EEEE dd/MM", { locale: es })})`
+    }
 
     // Formatear el número con el día
     const dayName = format(orderDate, "EEEE", { locale: es })
     const dayNumber = format(orderDate, "dd/MM")
-
     return `#${dailyNumber} (${dayName} ${dayNumber})`
   } catch (error) {
-    console.error("Error generating daily order number:", error)
+    console.error(`Error generating daily order number for order ${order.id}:`, error)
     return `#${order.id}`
   }
 }
@@ -196,7 +248,7 @@ function OrderCard({
           </div>
         )}
         <div className="flex justify-between gap-2">
-          <Button size="sm" variant="outline" className="flex-1" asChild>
+          <Button size="sm" variant="outline" className="flex-1 bg-transparent" asChild>
             <Link href={`/dashboard/orders/${order.id}`}>
               <Edit className="mr-1 h-3 w-3" />
               Editar
@@ -242,6 +294,7 @@ export default function OrdersPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [orderToDelete, setOrderToDelete] = useState<number | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
   const ordersPerPage = 10
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
@@ -258,11 +311,11 @@ export default function OrdersPage() {
     }
   }
 
-  // Función para obtener todas las órdenes (para calcular números diarios)
+  // Función mejorada para obtener todas las órdenes (para calcular números diarios)
   const fetchAllOrders = async () => {
     try {
       // Obtener todas las órdenes sin paginación para calcular números diarios
-      const allOrdersResponse = await api.get("/orders?limit=1000") // Ajustar según necesidades
+      const allOrdersResponse = await api.get("/orders?limit=10000") // Aumentar el límite
       const allOrdersData = allOrdersResponse.data
       const ordersData = allOrdersData.data || allOrdersData || []
 
@@ -285,6 +338,7 @@ export default function OrdersPage() {
         }),
       )
 
+      console.log(`Loaded ${ordersWithUsers.length} orders for daily number calculation`)
       setAllOrders(ordersWithUsers)
     } catch (err) {
       console.error("Error al cargar todas las órdenes:", err)
@@ -297,7 +351,6 @@ export default function OrdersPage() {
     setError(null)
     try {
       const ordersResponse = await api.get(`/orders?page=${page}&limit=${limit}`)
-
       // Extract data and pagination info from the API response
       const responseData = ordersResponse.data
       const ordersData = responseData.data || responseData || []
@@ -343,6 +396,16 @@ export default function OrdersPage() {
 
   // Memoizar los números de orden diarios para evitar recálculos innecesarios
   const ordersWithDailyNumbers = useMemo(() => {
+    if (allOrders.length === 0) {
+      // Si aún no tenemos todas las órdenes, usar un fallback temporal
+      return orders.map((order) => ({
+        ...order,
+        dailyOrderNumber: order.createdAt
+          ? `#... (${format(new Date(order.createdAt), "EEEE dd/MM", { locale: es })})`
+          : `#${order.id}`,
+      }))
+    }
+
     return orders.map((order) => ({
       ...order,
       dailyOrderNumber: generateDailyOrderNumber(order, allOrders),
@@ -356,10 +419,8 @@ export default function OrdersPage() {
       await api.delete(`/orders/${id}`)
       setOrders(orders.filter((order) => order.id !== id))
       setAllOrders(allOrders.filter((order) => order.id !== id)) // También actualizar allOrders
-
       const deletedOrder = orders.find((order) => order.id === id)
       const dailyNumber = deletedOrder ? generateDailyOrderNumber(deletedOrder, allOrders) : `#${id}`
-
       toast.success("Pedido eliminado", {
         description: `El pedido ${dailyNumber} ha sido eliminado correctamente.`,
       })
@@ -441,6 +502,7 @@ export default function OrdersPage() {
               </TabsList>
             </Tabs>
           </div>
+
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-grow">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -455,7 +517,7 @@ export default function OrdersPage() {
             <div className="flex gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-9 w-9">
+                  <Button variant="outline" size="icon" className="h-9 w-9 bg-transparent">
                     <Filter className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -575,7 +637,7 @@ export default function OrdersPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" className="h-8" asChild>
+                            <Button size="sm" variant="outline" className="h-8 bg-transparent" asChild>
                               <Link href={`/dashboard/orders/${order.id}`}>
                                 <Edit className="mr-1 h-3 w-3" />
                                 Editar
@@ -623,6 +685,7 @@ export default function OrdersPage() {
                   className={currentPage === 1 ? "cursor-not-allowed opacity-50" : ""}
                 />
               </PaginationItem>
+
               {/* Mostrar la primera página */}
               {currentPage > 2 && (
                 <PaginationItem>
@@ -637,6 +700,7 @@ export default function OrdersPage() {
                   </PaginationLink>
                 </PaginationItem>
               )}
+
               {/* Mostrar los puntos suspensivos si hay más de dos páginas entre la primera y la actual */}
               {currentPage > 3 && <PaginationEllipsis />}
 
@@ -679,6 +743,7 @@ export default function OrdersPage() {
                   </PaginationLink>
                 </PaginationItem>
               )}
+
               <PaginationItem>
                 <PaginationNext
                   href="#"

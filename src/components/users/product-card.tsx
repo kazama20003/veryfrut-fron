@@ -499,7 +499,7 @@ export function ProductCard({
         className={cn(
           "overflow-hidden border border-border/40 transition-all duration-200 flex flex-col bg-white",
           // Altura mínima ajustada para acomodar mejor el contenido
-          "min-h-[420px] sm:min-h-[450px]",
+          "min-h-[380px] sm:min-h-[420px] md:min-h-[450px]",
           !isMobile && isHovered && !disabled ? "shadow-lg border-border/80" : "shadow-sm",
           disabled && "opacity-60 cursor-not-allowed",
           loading && "animate-pulse",
@@ -547,10 +547,12 @@ export function ProductCard({
         </div>
 
         {/* Card Content */}
-        <CardContent className="p-3 flex-1 flex flex-col">
+        <CardContent className="p-2 sm:p-3 flex-1 flex flex-col">
           {/* Product title */}
           <div className="mb-2">
-            <h3 className="font-semibold text-sm leading-tight line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
+            <h3 className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem]">
+              {product.name}
+            </h3>
           </div>
 
           {/* Rating */}
@@ -560,7 +562,9 @@ export function ProductCard({
           </div>
 
           {/* Description */}
-          <p className="text-xs text-muted-foreground line-clamp-2 mb-3 leading-relaxed">{product.description}</p>
+          <p className="text-xs text-muted-foreground line-clamp-1 sm:line-clamp-2 mb-2 sm:mb-3 leading-relaxed">
+            {product.description}
+          </p>
 
           {/* Featured badge */}
           {showAsFeatured && (
@@ -580,7 +584,7 @@ export function ProductCard({
 
           {/* Quantity and unit selection */}
           <div className="mt-auto">
-            <div className="bg-gray-50 rounded-lg p-3 border">
+            <div className="bg-gray-50 rounded-lg p-2 sm:p-3 border">
               <div className="text-xs text-muted-foreground mb-2 flex items-center font-medium">
                 <Tag className="h-3 w-3 mr-1" />
                 <span>Cantidad y Presentación</span>
@@ -712,32 +716,32 @@ export function ProductCard({
         </CardContent>
 
         {/* Footer con botones mejorados y responsivos */}
-        <CardFooter className="p-3 pt-0 mt-auto">
+        <CardFooter className="p-2 sm:p-3 pt-0 mt-auto">
           {cartInfo.isInCart ? (
             /* Producto YA está en el carrito - Mostrar estado y opciones */
-            <div className="w-full space-y-3">
-              {/* Botones de acción cuando está en carrito */}
-              <div className="grid grid-cols-2 gap-2">
+            <div className="w-full space-y-2 sm:space-y-3">
+              {/* Botones de acción cuando está en carrito - MEJORADOS PARA MÓVIL */}
+              <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-11 border-green-600 text-green-700 hover:bg-green-50 bg-transparent text-xs font-medium"
+                  className="h-12 sm:h-11 border-green-600 text-green-700 hover:bg-green-50 bg-transparent text-sm sm:text-xs font-medium flex items-center justify-center"
                   onClick={() => handleAddToCart(product, selectedUnitId, quantity, false)}
                   disabled={isAddToCartDisabled}
                 >
-                  <Plus className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <Plus className="mr-2 sm:mr-1.5 h-4 sm:h-3.5 w-4 sm:w-3.5 flex-shrink-0" />
                   <span className="truncate">Agregar más</span>
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-11 border-blue-600 text-blue-700 hover:bg-blue-50 bg-transparent text-xs font-medium"
+                  className="h-12 sm:h-11 border-blue-600 text-blue-700 hover:bg-blue-50 bg-transparent text-sm sm:text-xs font-medium flex items-center justify-center"
                   onClick={() => handleAddToCart(product, selectedUnitId, quantity, true)}
                   disabled={isAddToCartDisabled}
                   title="Agregar como elemento separado en el carrito"
                 >
-                  <Package className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
-                  <span className="truncate">Separado</span>
+                  <Package className="mr-2 sm:mr-1.5 h-4 sm:h-3.5 w-4 sm:w-3.5 flex-shrink-0" />
+                  <span className="truncate">Elemento separado</span>
                 </Button>
               </div>
             </div>
@@ -747,8 +751,8 @@ export function ProductCard({
               <Button
                 size="sm"
                 className={cn(
-                  "w-full font-semibold transition-all duration-200 shadow-sm hover:shadow-md h-11",
-                  "text-xs sm:text-sm",
+                  "w-full font-semibold transition-all duration-200 shadow-sm hover:shadow-md h-12 sm:h-11",
+                  "text-sm sm:text-xs",
                   isOutOfStock
                     ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
                     : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white",
