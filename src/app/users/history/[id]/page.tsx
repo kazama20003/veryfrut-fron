@@ -883,7 +883,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex flex-1 items-center justify-between">
-          <h1 className="text-lg font-semibold md:text-xl">Detalle del Pedido #{order.id}</h1>
+          <h1 className="text-lg font-semibold md:text-xl">Editar Pedido: {order.id}</h1>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1 bg-transparent">
               <Printer className="h-4 w-4" />
