@@ -1,12 +1,11 @@
 "use client"
-
 import { useEffect, useCallback, useState, useMemo, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { isToday } from "date-fns"
-import { Calendar, Clock, Eye, Package, ShoppingBag, Truck, Building } from 'lucide-react'
-
+import { Calendar, Clock, Eye, Package, ShoppingBag, Truck, Building } from "lucide-react"
 import { api } from "@/lib/axiosInstance"
 import { getUserIdFromCookies } from "@/lib/cookies"
 import { Badge } from "@/components/ui/badge"
@@ -81,6 +80,7 @@ interface Order {
 }
 
 export default function OrdersHistoryPage() {
+  const searchParams = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -190,7 +190,6 @@ export default function OrdersHistoryPage() {
   const fetchOrders = useCallback(
     async (forceRefresh = false) => {
       const now = Date.now()
-
       // Throttling: evitar llamadas muy frecuentes (mínimo 5 segundos entre llamadas)
       if (!forceRefresh && now - lastFetchTimeRef.current < 5000) {
         return
@@ -211,9 +210,9 @@ export default function OrdersHistoryPage() {
 
         // Obtener órdenes del usuario
         const response = await api.get(`/orders/customer/${userId}`)
-        console.log('====================================');
-        console.log(response);
-        console.log('====================================');
+        console.log("====================================")
+        console.log(response)
+        console.log("====================================")
         const ordersData = response.data
 
         // Solo enriquecer si tenemos datos nuevos o si es la primera carga
@@ -254,6 +253,23 @@ export default function OrdersHistoryPage() {
       }
     }
   }, [fetchOrders]) // Incluir fetchOrders como dependencia
+
+  // Efecto para abrir automáticamente el diálogo si se pasa orderId en la URL
+  useEffect(() => {
+    const orderId = searchParams.get("orderId")
+    if (orderId && orders.length > 0) {
+      const orderToShow = orders.find((order) => order.id === Number.parseInt(orderId))
+      if (orderToShow) {
+        setSelectedOrder(orderToShow)
+        setIsDialogOpen(true)
+
+        // Mostrar toast de confirmación
+        toast.success("¡Pedido creado exitosamente!", {
+          description: `Pedido #${orderToShow.id} creado con ${orderToShow.orderItems.length} productos.`,
+        })
+      }
+    }
+  }, [orders, searchParams])
 
   // Función manual para refrescar
   const handleRefresh = useCallback(() => {
@@ -325,12 +341,10 @@ export default function OrdersHistoryPage() {
     if (item.unitMeasurement) {
       return item.unitMeasurement.name
     }
-
     if (item.product?.productUnits && item.product.productUnits.length > 0) {
       const selectedUnit = item.product.productUnits.find((pu) => pu.unitMeasurementId === item.unitMeasurementId)
       return selectedUnit?.unitMeasurement.name || "unidad(es)"
     }
-
     return "unidad(es)"
   }, [])
 
@@ -464,12 +478,10 @@ export default function OrdersHistoryPage() {
                       )}
 
                       <Separator className="my-3" />
-
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Fecha:</span>
                         <span className="text-sm text-muted-foreground">{formatDate(order.createdAt)}</span>
                       </div>
-
                       {canEdit && (
                         <div className="mt-2 rounded-md bg-blue-50 p-2 text-xs text-blue-700">
                           Este pedido puede ser editado hasta el final del día de hoy.
@@ -515,7 +527,6 @@ export default function OrdersHistoryPage() {
               )}
             </div>
           </DialogHeader>
-
           {selectedOrder && (
             <div className="space-y-6">
               {/* Estado del pedido */}
@@ -529,7 +540,6 @@ export default function OrdersHistoryPage() {
                     {getOrderStatusInfo(selectedOrder.status as OrderStatus).text}
                   </Badge>
                 </div>
-
                 {isToday(new Date(selectedOrder.createdAt)) && selectedOrder.status === OrderStatus.CREATED && (
                   <div className="mt-3 rounded-md bg-blue-50 p-2 text-xs text-blue-700">
                     Este pedido puede ser editado hasta el final del día de hoy.
@@ -625,7 +635,6 @@ export default function OrdersHistoryPage() {
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cerrar
                 </Button>
-
                 {isToday(new Date(selectedOrder.createdAt)) && selectedOrder.status === OrderStatus.CREATED && (
                   <OrderEditButton order={selectedOrder} />
                 )}

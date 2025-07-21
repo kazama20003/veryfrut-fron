@@ -275,6 +275,7 @@ export default function NewOrderPage() {
       try {
         const limaDate = getLimaPeruDate()
         console.log(`Verificando pedido para área ${selectedAreaId} en fecha ${limaDate}`)
+
         const response = await api.get(`/orders/check?areaId=${selectedAreaId}&date=${limaDate}`)
         console.log("Respuesta de verificación:", response.data)
 
@@ -329,6 +330,7 @@ export default function NewOrderPage() {
     if (!productSearch.trim()) return []
 
     const searchTerm = productSearch.toLowerCase().trim()
+
     return products
       .flatMap((product) =>
         product.productUnits.map((unit) => ({
@@ -379,47 +381,29 @@ export default function NewOrderPage() {
     }
   }
 
-  // Añadir producto específico desde la búsqueda
+  // Añadir producto específico desde la búsqueda - MODIFICADO: Siempre crear nuevo item
   const handleAddSpecificProduct = (productOption: ProductOption) => {
-    const existingIndex = orderItems.findIndex(
-      (item) =>
-        item.productId === productOption.productId && item.unitMeasurementId === productOption.unitMeasurementId,
-    )
-
-    if (existingIndex >= 0) {
-      const currentQuantity = orderItems[existingIndex].quantity
-      const newQuantity = currentQuantity + 1
-      const newItems = [...orderItems]
-      newItems[existingIndex].quantity = newQuantity
-      newItems[existingIndex].total = newQuantity * newItems[existingIndex].price
-      setOrderItems(newItems)
-      setQuantityInputs((prev) => ({
-        ...prev,
-        [existingIndex]: newQuantity.toString(),
-      }))
-      toast.success("Cantidad actualizada", {
-        description: `${productOption.productName} - ${productOption.unitMeasurementName}: ${newQuantity}`,
-      })
-    } else {
-      const newItem: OrderItem = {
-        productId: productOption.productId,
-        productName: productOption.productName,
-        quantity: 1,
-        price: productOption.price,
-        total: productOption.price,
-        unitMeasurementId: productOption.unitMeasurementId,
-        unitMeasurementName: productOption.unitMeasurementName,
-      }
-      const newIndex = orderItems.length
-      setOrderItems([...orderItems, newItem])
-      setQuantityInputs((prev) => ({
-        ...prev,
-        [newIndex]: "1",
-      }))
-      toast.success("Producto agregado", {
-        description: `${productOption.productName} - ${productOption.unitMeasurementName}`,
-      })
+    // Siempre crear un nuevo item, sin verificar si ya existe
+    const newItem: OrderItem = {
+      productId: productOption.productId,
+      productName: productOption.productName,
+      quantity: 1,
+      price: productOption.price,
+      total: productOption.price,
+      unitMeasurementId: productOption.unitMeasurementId,
+      unitMeasurementName: productOption.unitMeasurementName,
     }
+
+    const newIndex = orderItems.length
+    setOrderItems([...orderItems, newItem])
+    setQuantityInputs((prev) => ({
+      ...prev,
+      [newIndex]: "1",
+    }))
+
+    toast.success("Producto agregado", {
+      description: `${productOption.productName} - ${productOption.unitMeasurementName}`,
+    })
 
     setProductSearch("")
     setShowProductSearch(false)
@@ -473,6 +457,7 @@ export default function NewOrderPage() {
     newItems[index].total = currentQuantity * product.price
     newItems[index].unitMeasurementId = unit.unitMeasurementId
     newItems[index].unitMeasurementName = unit.unitMeasurement.name
+
     setOrderItems(newItems)
 
     if (!quantityInputs[index]) {
@@ -541,7 +526,7 @@ export default function NewOrderPage() {
     return true
   }
 
-  // Enviar formulario
+  // Enviar formulario - MODIFICADO: Redirigir al pedido específico
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -597,8 +582,8 @@ export default function NewOrderPage() {
         description: `Se creó el pedido con ${orderItems.length} productos.`,
       })
 
-      // Redirigir a la página de historial específica de la orden creada
-      router.push(`/users/history/${createdOrder.id}`)
+      // Redirigir a la página de historial con el ID del pedido para abrir el diálogo automáticamente
+      router.push(`/users/history?orderId=${createdOrder.id}`)
     } catch (err) {
       console.error("Error al crear el pedido:", err)
       toast.error("Error al crear el pedido", {
